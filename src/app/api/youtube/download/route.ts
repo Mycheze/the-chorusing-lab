@@ -8,10 +8,13 @@ import {
   existsSync,
   readdirSync,
   statSync,
+  chmodSync,
+  writeFileSync,
 } from "fs";
 import { join, dirname } from "path";
 import { tmpdir } from "os";
 import { execSync } from "child_process";
+import { platform, arch } from "os";
 
 // YouTube URL validation regex
 const YOUTUBE_URL_REGEX = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+/;
@@ -21,6 +24,63 @@ const YOUTUBE_URL_REGEX = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+/;
  */
 function isValidYouTubeUrl(url: string): boolean {
   return YOUTUBE_URL_REGEX.test(url);
+}
+
+/**
+ * Download yt-dlp binary directly from GitHub releases
+ * This is a fallback for serverless environments where postinstall scripts don't work
+ */
+async function downloadYtDlpBinary(targetPath: string): Promise<void> {
+  const osPlatform = platform();
+  const osArch = arch();
+  
+  // Determine the binary name and platform identifier
+  let platformId: string;
+  let binaryName: string;
+  
+  if (osPlatform === "linux") {
+    if (osArch === "x64") {
+      platformId = "linux";
+      binaryName = "yt-dlp";
+    } else if (osArch === "arm64") {
+      platformId = "linux_aarch64";
+      binaryName = "yt-dlp";
+    } else {
+      throw new Error(`Unsupported Linux architecture: ${osArch}`);
+    }
+  } else if (osPlatform === "darwin") {
+    if (osArch === "x64") {
+      platformId = "macos";
+      binaryName = "yt-dlp";
+    } else if (osArch === "arm64") {
+      platformId = "macos_legacy";
+      binaryName = "yt-dlp";
+    } else {
+      throw new Error(`Unsupported macOS architecture: ${osArch}`);
+    }
+  } else {
+    throw new Error(`Unsupported platform: ${osPlatform}`);
+  }
+
+  // Get latest release from GitHub
+  const releaseUrl = `https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_${platformId}`;
+  
+  console.log(`📥 Downloading yt-dlp from: ${releaseUrl}`);
+  
+  try {
+    const response = await fetch(releaseUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to download: ${response.status} ${response.statusText}`);
+    }
+    
+    const buffer = Buffer.from(await response.arrayBuffer());
+    writeFileSync(targetPath, buffer);
+    chmodSync(targetPath, 0o755); // Make executable
+    console.log(`✅ yt-dlp binary downloaded to: ${targetPath}`);
+  } catch (error) {
+    console.error("❌ Failed to download yt-dlp binary:", error);
+    throw error;
+  }
 }
 
 /**
@@ -170,36 +230,59 @@ export async function POST(request: NextRequest) {
     // If binary doesn't exist, try to download it
     if (!binPathExists) {
       console.log("⚠️ yt-dlp binary not found, attempting to download...");
-      if (!postinstallExists) {
-        console.error("❌ Postinstall script not found at:", postinstallScript);
-        return NextResponse.json(
-          {
-            error:
-              "yt-dlp binary not found and postinstall script not available. Please run: pnpm rebuild youtube-dl-exec",
-          },
-          { status: 500 }
-        );
-      }
+      
+      // First, try using the postinstall script if available
+      if (postinstallExists) {
+        try {
+          execSync(`node "${postinstallScript}"`, {
+            stdio: "inherit",
+            cwd: packageDir,
+          });
+          console.log("✅ Binary downloaded via postinstall script");
 
-      try {
-        execSync(`node "${postinstallScript}"`, {
-          stdio: "inherit",
-          cwd: packageDir,
-        });
-        console.log("✅ Binary downloaded successfully");
-
-        // Verify it was created
-        if (!existsSync(binPath)) {
-          throw new Error("Binary was not created after download");
+          // Verify it was created
+          if (existsSync(binPath)) {
+            // Success, continue
+          } else {
+            throw new Error("Binary was not created after postinstall");
+          }
+        } catch (postinstallError: any) {
+          console.warn("⚠️ Postinstall script failed, trying direct download:", postinstallError.message);
+          // Fall through to direct download
         }
-      } catch (downloadError: any) {
-        console.error("❌ Failed to download binary:", downloadError);
-        return NextResponse.json(
-          {
-            error: `yt-dlp binary not found and could not be downloaded automatically: ${downloadError.message}. Please run: node "${postinstallScript}"`,
-          },
-          { status: 500 }
-        );
+      }
+      
+      // If still not found, download directly from GitHub
+      if (!existsSync(binPath)) {
+        try {
+          // Ensure bin directory exists
+          const binDir = dirname(binPath);
+          if (!existsSync(binDir)) {
+            // Try to create it, but if we can't, use /tmp instead
+            try {
+              execSync(`mkdir -p "${binDir}"`, { stdio: "inherit" });
+            } catch {
+              // If we can't create the bin directory, use /tmp
+              binPath = join(tmpdir(), "yt-dlp");
+              console.log(`⚠️ Using temp directory for binary: ${binPath}`);
+            }
+          }
+          
+          await downloadYtDlpBinary(binPath);
+          
+          // Verify it was created
+          if (!existsSync(binPath)) {
+            throw new Error("Binary was not created after direct download");
+          }
+        } catch (downloadError: any) {
+          console.error("❌ Failed to download binary:", downloadError);
+          return NextResponse.json(
+            {
+              error: `yt-dlp binary not found and could not be downloaded: ${downloadError.message}. The YouTube download feature requires yt-dlp to be available.`,
+            },
+            { status: 500 }
+          );
+        }
       }
     }
 
