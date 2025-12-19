@@ -33,11 +33,11 @@ function isValidYouTubeUrl(url: string): boolean {
 async function downloadYtDlpBinary(targetPath: string): Promise<void> {
   const osPlatform = platform();
   const osArch = arch();
-  
+
   // Determine the binary name and platform identifier
   let platformId: string;
   let binaryName: string;
-  
+
   if (osPlatform === "linux") {
     if (osArch === "x64") {
       platformId = "linux";
@@ -64,15 +64,17 @@ async function downloadYtDlpBinary(targetPath: string): Promise<void> {
 
   // Get latest release from GitHub
   const releaseUrl = `https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_${platformId}`;
-  
+
   console.log(`📥 Downloading yt-dlp from: ${releaseUrl}`);
-  
+
   try {
     const response = await fetch(releaseUrl);
     if (!response.ok) {
-      throw new Error(`Failed to download: ${response.status} ${response.statusText}`);
+      throw new Error(
+        `Failed to download: ${response.status} ${response.statusText}`
+      );
     }
-    
+
     const buffer = Buffer.from(await response.arrayBuffer());
     writeFileSync(targetPath, buffer);
     chmodSync(targetPath, 0o755); // Make executable
@@ -230,7 +232,7 @@ export async function POST(request: NextRequest) {
     // If binary doesn't exist, try to download it
     if (!binPathExists) {
       console.log("⚠️ yt-dlp binary not found, attempting to download...");
-      
+
       // First, try using the postinstall script if available
       if (postinstallExists) {
         try {
@@ -247,11 +249,14 @@ export async function POST(request: NextRequest) {
             throw new Error("Binary was not created after postinstall");
           }
         } catch (postinstallError: any) {
-          console.warn("⚠️ Postinstall script failed, trying direct download:", postinstallError.message);
+          console.warn(
+            "⚠️ Postinstall script failed, trying direct download:",
+            postinstallError.message
+          );
           // Fall through to direct download
         }
       }
-      
+
       // If still not found, download directly from GitHub
       if (!existsSync(binPath)) {
         try {
@@ -267,9 +272,9 @@ export async function POST(request: NextRequest) {
               console.log(`⚠️ Using temp directory for binary: ${binPath}`);
             }
           }
-          
+
           await downloadYtDlpBinary(binPath);
-          
+
           // Verify it was created
           if (!existsSync(binPath)) {
             throw new Error("Binary was not created after direct download");
