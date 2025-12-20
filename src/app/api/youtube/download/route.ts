@@ -406,7 +406,7 @@ export async function POST(request: NextRequest) {
         // Use formatSort to prefer non-MP4 formats and deprioritize MP4
         formatSort: [
           "ext:mp3:prefer",
-          "ext:webm:prefer", 
+          "ext:webm:prefer",
           "ext:opus:prefer",
           "ext:ogg:prefer",
           "ext:m4a:prefer",
@@ -495,8 +495,8 @@ export async function POST(request: NextRequest) {
         // Reject MP4 files - they cause browser parsing errors
         throw new Error(
           "Downloaded file is in MP4 format which has metadata parsing issues in browsers. " +
-          "Please try again - the system will attempt to download in a different format (MP3/WebM). " +
-          "If this persists, the video may only be available in MP4 format."
+            "Please try again - the system will attempt to download in a different format (MP3/WebM). " +
+            "If this persists, the video may only be available in MP4 format."
         );
       }
 
