@@ -401,19 +401,16 @@ export async function POST(request: NextRequest) {
         // STRICTLY avoid MP4 - it has metadata parsing issues in browsers (especially Firefox)
         // Use format selection that explicitly avoids MP4 container
         // Prefer MP3 and WebM which are most browser-compatible
-        // Prefer non-MP4 formats, but allow fallback if needed
-        // The format selection will try preferred formats first, then fall back
-        format:
-          "bestaudio[ext!=mp4][ext!=m4v][ext=mp3]/bestaudio[ext!=mp4][ext!=m4v][ext=webm]/bestaudio[ext!=mp4][ext!=m4v][ext=opus]/bestaudio[ext!=mp4][ext!=m4v][ext=ogg]/bestaudio[ext!=mp4][ext!=m4v][ext=m4a]/bestaudio[ext!=mp4][ext!=m4v]/bestaudio",
-        // Use formatSort to prefer non-MP4 formats and deprioritize MP4
+        // Prefer non-MP4 formats, but allow any audio format as fallback
+        // Simple format selection without exclusions - formatSort will handle preferences
+        format: "bestaudio[ext=mp3]/bestaudio[ext=webm]/bestaudio[ext=opus]/bestaudio[ext=ogg]/bestaudio[ext=m4a]/bestaudio",
+        // Use formatSort to prefer non-MP4 formats (but don't exclude MP4 completely)
         formatSort: [
           "ext:mp3:prefer",
           "ext:webm:prefer",
           "ext:opus:prefer",
           "ext:ogg:prefer",
           "ext:m4a:prefer",
-          "ext:mp4:-prefer", // Deprioritize MP4
-          "ext:m4v:-prefer", // Deprioritize M4V
         ],
         // Use output template to ensure we get the right extension
         output: join(tempDir, `audio-${timestamp}.%(ext)s`),
