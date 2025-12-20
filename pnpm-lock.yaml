@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@descript/kali':
+        specifier: ^0.0.7
+        version: 0.0.7
       '@supabase/supabase-js':
         specifier: ^2.39.7
         version: 2.49.10
@@ -69,6 +72,10 @@ packages:
   '@alloc/quick-lru@5.2.0':
     resolution: {integrity: sha512-UrcABB+4bUrFABwbluTIBErXwvbsU/V7TZWfmbgJfbkwiBuziS9gxdODUyuiecfdGQ85jglMW6juS3+z5TsKLw==}
     engines: {node: '>=10'}
+
+  '@descript/kali@0.0.7':
+    resolution: {integrity: sha512-N2YkJHOxoIJ7L+R7Gnjhv0gQHibyjBOSx9DmdLfZKEt5Mw49e9eEMx7kCoAyTlsfMEESvDA6A/gq2SbPLZ0sSQ==}
+    engines: {node: '>=6'}
 
   '@emnapi/core@1.4.3':
     resolution: {integrity: sha512-4m62DuCE07lw01soJwPiBGC0nAww0Q+RY70VZ+n49yDIO13yyinhbWCeNnaob0lakDtWQzSdtNWzJeOJt2ma+g==}
@@ -1965,6 +1972,8 @@ packages:
 snapshots:
 
   '@alloc/quick-lru@5.2.0': {}
+
+  '@descript/kali@0.0.7': {}
 
   '@emnapi/core@1.4.3':
     dependencies:
