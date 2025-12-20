@@ -401,10 +401,9 @@ export async function POST(request: NextRequest) {
         // STRICTLY avoid MP4 - it has metadata parsing issues in browsers (especially Firefox)
         // Use format selection that explicitly avoids MP4 container
         // Prefer MP3 and WebM which are most browser-compatible
-        // Prefer non-MP4 formats, but allow any audio format as fallback
-        // Simple format selection without exclusions - formatSort will handle preferences
-        format:
-          "bestaudio[ext=mp3]/bestaudio[ext=webm]/bestaudio[ext=opus]/bestaudio[ext=ogg]/bestaudio[ext=m4a]/bestaudio",
+        // Use simple bestaudio selection - formatSort will handle preferences
+        // This ensures we always get something, even if preferred formats aren't available
+        format: "bestaudio",
         // Use formatSort to prefer non-MP4 formats (but don't exclude MP4 completely)
         formatSort: [
           "ext:mp3:prefer",
