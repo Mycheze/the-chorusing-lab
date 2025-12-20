@@ -262,10 +262,10 @@ export async function POST(request: NextRequest) {
         try {
           // In serverless environments, always use /tmp since node_modules is read-only
           // Check if we're in a serverless environment (Vercel uses /var/task)
-          const isServerless = process.cwd().includes("/var/task") || process.cwd().includes("/tmp");
+          const isServerless = process.cwd().includes("/var/task");
           
           if (isServerless) {
-            // Always use /tmp in serverless environments
+            // Always use /tmp in serverless environments - skip trying node_modules
             binPath = join(tmpdir(), "yt-dlp");
             console.log(`⚠️ Serverless environment detected, using temp directory: ${binPath}`);
           } else {
@@ -274,10 +274,12 @@ export async function POST(request: NextRequest) {
             if (!existsSync(binDir)) {
               try {
                 execSync(`mkdir -p "${binDir}"`, { stdio: "inherit" });
-              } catch {
+                console.log(`✅ Created bin directory: ${binDir}`);
+              } catch (mkdirError: any) {
                 // If we can't create the bin directory, use /tmp
+                console.warn(`⚠️ Cannot create bin directory (${mkdirError.message}), using temp directory`);
                 binPath = join(tmpdir(), "yt-dlp");
-                console.log(`⚠️ Cannot create bin directory, using temp directory: ${binPath}`);
+                console.log(`⚠️ Using temp directory for binary: ${binPath}`);
               }
             }
           }
@@ -303,8 +305,8 @@ export async function POST(request: NextRequest) {
     }
     
     // Store the final binPath for use with youtube-dl-exec
-    // Always use the downloaded binary path if it's in /tmp
-    const finalBinPath = binPath.includes("/tmp") ? binPath : binPath;
+    // This will be the path we actually use, whether from package or /tmp
+    const finalBinPath = binPath;
 
     // Create temporary file path
     const tempDir = tmpdir();
