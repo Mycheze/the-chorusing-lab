@@ -616,6 +616,20 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      // Handle MP4 format rejection
+      if (
+        errorMessage.includes("MP4 format") ||
+        errorMessage.includes("metadata parsing issues")
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "The video was downloaded in MP4 format which has compatibility issues in browsers. Please try again - the system will attempt to download in a different format (MP3/WebM). If this persists, the video may only be available in MP4 format.",
+          },
+          { status: 400 }
+        );
+      }
+
       // Return more detailed error message
       return NextResponse.json(
         {
