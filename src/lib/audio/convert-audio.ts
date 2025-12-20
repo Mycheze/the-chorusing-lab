@@ -50,13 +50,13 @@ export async function convertAudioToCompatibleFormat(
     } catch (decodeError) {
       console.error("❌ AudioContext.decodeAudioData failed:", decodeError);
       audioContext.close();
-      
+
       // If decodeAudioData fails, the MP4 is too corrupted for client-side conversion
       // We need to inform the user that server-side conversion would be needed
       throw new Error(
         "This MP4 file cannot be decoded in the browser due to metadata issues. " +
-        "The file would need server-side conversion (ffmpeg) which isn't available in this serverless environment. " +
-        "Please try a different video or use direct file upload with a different format."
+          "The file would need server-side conversion (ffmpeg) which isn't available in this serverless environment. " +
+          "Please try a different video or use direct file upload with a different format."
       );
     }
 
