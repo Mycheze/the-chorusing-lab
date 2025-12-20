@@ -490,7 +490,7 @@ export async function POST(request: NextRequest) {
         audio: {
           data: audioBase64,
           filename,
-          mimeType: "audio/mp4",
+          mimeType,
           size: audioBuffer.length,
         },
         videoInfo: {
