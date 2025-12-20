@@ -451,7 +451,7 @@ export async function POST(request: NextRequest) {
         // Use format selection - try audio-only first, with fallbacks
         // The format string tries bestaudio, but if that's not available,
         // it will try to get the best format that has audio
-        format: "bestaudio/best",
+        format: selectedFormat || "bestaudio/best",
         // Use output template to ensure we get the right extension
         output: join(tempDir, `audio-${timestamp}.%(ext)s`),
         noWarnings: true,
