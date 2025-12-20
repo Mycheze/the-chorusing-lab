@@ -328,12 +328,21 @@ export async function POST(request: NextRequest) {
       console.log("📊 Binary exists:", existsSync(finalBinPath));
 
       // Create a custom youtube-dl-exec instance with our binary path if needed
+      // Use more realistic browser headers to avoid bot detection
       const execOptions = {
         dumpSingleJson: true,
         noWarnings: true,
         noCheckCertificates: true,
         preferFreeFormats: true,
-        addHeader: ["referer:youtube.com", "user-agent:Mozilla/5.0"],
+        addHeader: [
+          "referer:https://www.youtube.com/",
+          "user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "accept:text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "accept-language:en-US,en;q=0.5",
+        ],
+        // Additional options to reduce bot detection
+        extractFlat: false,
+        noPlaylist: true,
       };
 
       // If binary is in /tmp or not in node_modules, use create() to specify custom path
@@ -377,7 +386,14 @@ export async function POST(request: NextRequest) {
         noWarnings: true,
         noCheckCertificates: true,
         preferFreeFormats: true,
-        addHeader: ["referer:youtube.com", "user-agent:Mozilla/5.0"],
+        addHeader: [
+          "referer:https://www.youtube.com/",
+          "user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "accept:text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "accept-language:en-US,en;q=0.5",
+        ],
+        // Additional options to reduce bot detection
+        noPlaylist: true,
       };
 
       // Use the same execFunction we created earlier (with custom binary if needed)
@@ -465,6 +481,21 @@ export async function POST(request: NextRequest) {
             error: `yt-dlp error: ${errorMessage}. Please check the server logs for details.`,
           },
           { status: 500 }
+        );
+      }
+
+      // Handle YouTube bot detection
+      if (
+        errorMessage.includes("Sign in to confirm you're not a bot") ||
+        errorMessage.includes("bot") ||
+        errorMessage.includes("cookies")
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "YouTube is blocking this request. The video may require authentication or may be temporarily unavailable. Please try again later or use a different video.",
+          },
+          { status: 403 }
         );
       }
 
