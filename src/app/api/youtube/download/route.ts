@@ -398,11 +398,13 @@ export async function POST(request: NextRequest) {
       console.log("🎵 Output path:", audioFilePath);
 
       const downloadOptions: any = {
-        // Use format selection to get audio-only without needing ffmpeg
-        // Prefer audio formats that browsers can play directly
-        // M4A (AAC) is most compatible, then MP3, then WebM
+        // STRICTLY avoid MP4 - it has metadata parsing issues in browsers (especially Firefox)
+        // Prefer MP3 and WebM which are more browser-compatible
+        // Explicitly exclude MP4/M4V formats
         format:
-          "bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio[ext=webm]/bestaudio/best[height<=480]",
+          "bestaudio[ext=mp3]/bestaudio[ext=webm]/bestaudio[ext=opus]/bestaudio[ext=ogg]/bestaudio[ext=m4a]/bestaudio",
+        // Reject MP4/M4V formats - they cause browser metadata parsing errors
+        rejectTitles: ["mp4", "m4v"],
         // Use output template to ensure we get the right extension
         output: join(tempDir, `audio-${timestamp}.%(ext)s`),
         noWarnings: true,
@@ -416,8 +418,6 @@ export async function POST(request: NextRequest) {
         ],
         // Additional options to reduce bot detection
         noPlaylist: true,
-        // Skip post-processing to avoid needing ffmpeg
-        postprocessorArgs: "ffmpeg:-vn", // Extract audio only if ffmpeg is available, but don't fail if not
       };
 
       // Add cookies if provided (yt-dlp uses --cookies option)
