@@ -13,6 +13,7 @@ import {
   Loader2,
   AlertCircle,
   Repeat,
+  Gauge,
 } from "lucide-react";
 import type { AudioClip } from "@/types/audio";
 
@@ -39,10 +40,12 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
   const [current, setCurrent] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1);
+  const [playbackRate, setPlaybackRate] = useState(1);
   const [region, setRegion] = useState<AudioRegion | null>(null);
   const [loop, setLoop] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const originalDurationRef = useRef<number>(0);
 
   /* ----------  Robust destroy helper  ------------------------------ */
   const destroy = useCallback((ws?: any) => {
@@ -77,6 +80,8 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
         const regions = Regions.create();
         regionsRef.current = regions;
 
+        // Use MediaElement backend to support preservesPitch for tempo changes
+        // MediaElement backend works well with regions and supports native pitch preservation
         const ws = WaveSurfer.create({
           container: waveformElement,
           height: 120,
@@ -87,9 +92,8 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
           interact: true,
           normalize: true,
           plugins: [regions],
-          // CRITICAL: Use WebAudio backend like the working AudioPlayer
-          // This might fix the seek issues with regions plugin
-          backend: "WebAudio" as const,
+          // Use MediaElement backend for preservesPitch support (tempo change without pitch shift)
+          backend: "MediaElement" as const,
         });
         wsRef.current = ws;
         _activeWs = ws;
@@ -97,14 +101,39 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
 
         ws.on("ready", () => {
           if (!mounted.current) return;
-          setDuration(ws.getDuration());
+          const dur = ws.getDuration();
+          originalDurationRef.current = dur;
+          setDuration(dur);
           setLoading(false);
           setIsReady(true);
+          // Initialize playback rate to 1.0
+          try {
+            ws.setPlaybackRate(1.0);
+            // If using MediaElement backend, set preservesPitch for tempo change
+            const backend = (ws as any).backend;
+            if (backend?.media) {
+              backend.media.preservesPitch = true;
+            }
+          } catch (err) {
+            // Ignore if playback rate setting fails
+          }
         });
         ws.on("play", () => mounted.current && setIsPlaying(true));
         ws.on("pause", () => mounted.current && setIsPlaying(false));
         ws.on("finish", () => mounted.current && setIsPlaying(false));
-        ws.on("timeupdate", (t: number) => mounted.current && setCurrent(t));
+        ws.on("timeupdate", (t: number) => {
+          if (!mounted.current) return;
+          // t is the current time in the original audio timeline
+          // For display purposes, when tempo is slowed (rate < 1), we want to show
+          // the time as if it's moving slower to match the visual playhead
+          // However, with MediaElement backend and preservesPitch, the timeupdate
+          // should already account for this correctly
+          // Actually, we need to show the "effective" time - when rate is 0.5x,
+          // 5 seconds of audio takes 10 seconds to play, so we show 10 seconds
+          // But the playhead position should be at 5/10 = 50% of the waveform
+          // So we keep t as-is for playhead position, but adjust display time
+          setCurrent(t);
+        });
 
         regions.on("region-created", (r: any) => {
           regions
@@ -227,10 +256,63 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
   const changeVolume = (v: number) => {
     const ws = wsRef.current;
     if (!isReady || !ws) return;
-    const vol = Math.max(0, Math.min(1, v));
-    ws.setVolume(vol);
-    setVolume(vol);
+    // Clamp volume to 0-3.0 (0-300%)
+    const vol = Math.max(0, Math.min(3, v));
+    
+    // Access Web Audio API gain node for volume boost beyond 100%
+    try {
+      const backend = (ws as any).backend;
+      const gainNode = backend?.gainNode;
+      
+      if (gainNode && vol > 1.0) {
+        // For volumes > 100%, set WaveSurfer to max (1.0) and apply additional gain
+        // This works with both WebAudio and MediaElement backends
+        ws.setVolume(1.0);
+        gainNode.gain.value = vol;
+      } else {
+        // For volumes <= 100%, use normal WaveSurfer volume
+        ws.setVolume(vol);
+        if (gainNode) {
+          gainNode.gain.value = 1.0; // Reset gain node to default
+        }
+      }
+      setVolume(vol);
+    } catch (err) {
+      // Fallback to standard volume if gain node access fails
+      // MediaElement backend might not have gainNode, so clamp to 0-1
+      const volClamped = Math.max(0, Math.min(1, vol));
+      ws.setVolume(volClamped);
+      setVolume(volClamped);
+    }
   };
+
+  const changePlaybackRate = useCallback((rate: number) => {
+    const ws = wsRef.current;
+    if (!isReady || !ws) return;
+    // Clamp playback rate to 0.5x - 2.0x
+    const clampedRate = Math.max(0.5, Math.min(2.0, rate));
+    
+    try {
+      // Set playback rate
+      ws.setPlaybackRate(clampedRate);
+      
+      // Enable preservesPitch for tempo change (speed without pitch shift)
+      // MediaElement backend supports this natively
+      const backend = (ws as any).backend;
+      if (backend?.media) {
+        backend.media.preservesPitch = true;
+      }
+      
+      // Update effective duration based on playback rate
+      // When rate is 0.5x, duration is 2x longer (takes longer to play)
+      const effectiveDuration = originalDurationRef.current / clampedRate;
+      setDuration(effectiveDuration);
+      
+      setPlaybackRate(clampedRate);
+    } catch (err) {
+      console.error("Failed to set playback rate:", err);
+    }
+  }, [isReady]);
 
   const clearSelection = useCallback(() => {
     const regions = regionsRef.current;
@@ -300,10 +382,13 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
     if (dur <= 0) return;
 
     const id = window.setInterval(() => {
+      // getCurrentTime returns time in original audio timeline
+      // This is correct for region boundaries (regions are in original time)
       const t = ws.getCurrentTime();
 
       if (region) {
         // If we have a region, enforce its boundaries
+        // Region times are in original audio time, which matches getCurrentTime
         if (t >= region.end) {
           // Temporarily disable regions to allow seeks
           const regions = regionsRef.current;
@@ -448,20 +533,48 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
             </div>
 
             <div className="font-mono text-sm text-gray-600">
-              {fmt(current)} / {fmt(duration)}
+              {fmt(current)} / {fmt(originalDurationRef.current || duration)}
+              {playbackRate !== 1 && (
+                <span className="text-xs text-gray-500 ml-1">
+                  ({playbackRate.toFixed(1)}x)
+                </span>
+              )}
             </div>
 
-            <div className="flex items-center gap-2">
-              <Volume2 className="w-4 h-4 text-gray-500" />
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.1"
-                value={volume}
-                onChange={(e) => changeVolume(parseFloat(e.target.value))}
-                className="w-20"
-              />
+            <div className="flex items-center gap-4">
+              {/* Volume Control */}
+              <div className="flex items-center gap-2">
+                <Volume2 className="w-4 h-4 text-gray-500" />
+                <input
+                  type="range"
+                  min="0"
+                  max="3"
+                  step="0.05"
+                  value={volume}
+                  onChange={(e) => changeVolume(parseFloat(e.target.value))}
+                  className="w-20"
+                />
+                <span className="text-xs text-gray-600 min-w-[3rem]">
+                  {Math.round(volume * 100)}%
+                </span>
+              </div>
+
+              {/* Speed Control */}
+              <div className="flex items-center gap-2">
+                <Gauge className="w-4 h-4 text-gray-500" />
+                <input
+                  type="range"
+                  min="0.5"
+                  max="2.0"
+                  step="0.1"
+                  value={playbackRate}
+                  onChange={(e) => changePlaybackRate(parseFloat(e.target.value))}
+                  className="w-20"
+                />
+                <span className="text-xs text-gray-600 min-w-[2.5rem]">
+                  {playbackRate.toFixed(1)}x
+                </span>
+              </div>
             </div>
           </div>
         </div>
