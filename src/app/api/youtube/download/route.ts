@@ -403,7 +403,8 @@ export async function POST(request: NextRequest) {
       // Exclude MP4 container formats (mp4, m4v, m4a) - they all have metadata parsing issues
       // M4A is audio in MP4 container, which also has the metadata issue
       const nonMp4AudioFormats = audioFormats.filter(
-        (f: any) => f.ext && f.ext !== "mp4" && f.ext !== "m4v" && f.ext !== "m4a"
+        (f: any) =>
+          f.ext && f.ext !== "mp4" && f.ext !== "m4v" && f.ext !== "m4a"
       );
 
       console.log(`📊 Available formats: ${availableFormats.length} total`);
@@ -428,18 +429,11 @@ export async function POST(request: NextRequest) {
       // This ensures we get a specific format that works
       let selectedFormat: string | undefined;
 
-      // Check if we only have MP4 container formats available (mp4, m4v, m4a)
-      // These all use MP4 container which has metadata parsing issues in browsers
+      // Note: If only MP4 container formats are available, we'll allow them
+      // and convert them client-side using Web Audio API
       if (audioFormats.length > 0 && nonMp4AudioFormats.length === 0) {
         console.warn(
-          "⚠️ Only MP4 container formats (MP4/M4V/M4A) available - these have browser compatibility issues"
-        );
-        // We can't convert MP4 container formats to other formats without ffmpeg (not available in serverless)
-        // Reject with a clear error message
-        throw new Error(
-          "This video is only available in MP4 container formats (MP4/M4V/M4A), which have metadata parsing issues in browsers. " +
-            "Unfortunately, we cannot convert these formats to other containers in this serverless environment. " +
-            "Please try a different video, or use the direct file upload feature instead."
+          "⚠️ Only MP4 container formats (MP4/M4V/M4A) available - will convert client-side"
         );
       }
 
@@ -547,17 +541,18 @@ export async function POST(request: NextRequest) {
       const actualExt =
         actualAudioFile.split(".").pop()?.toLowerCase() || "mp3";
 
-      // Validate that we got a non-MP4 container format
+      // Check if file needs client-side conversion (MP4 container formats)
       // MP4, M4V, and M4A all use MP4 container which has metadata issues in browsers
-      if (actualExt === "mp4" || actualExt === "m4v" || actualExt === "m4a") {
-        console.error(
-          "❌ Got MP4 container file (ext: " + actualExt + ") which has metadata parsing issues in browsers. File:",
+      // We'll allow them and convert client-side
+      const needsConversion =
+        actualExt === "mp4" || actualExt === "m4v" || actualExt === "m4a";
+      
+      if (needsConversion) {
+        console.warn(
+          "⚠️ Got MP4 container file (ext: " +
+            actualExt +
+            ") - will be converted client-side. File:",
           actualAudioFile
-        );
-        // Reject MP4 container formats - they cause browser parsing errors
-        throw new Error(
-          "Downloaded file is in MP4 container format (" + actualExt + ") which has metadata parsing issues in browsers. " +
-            "This should not happen if format selection worked correctly. Please try again."
         );
       }
 
@@ -611,6 +606,7 @@ export async function POST(request: NextRequest) {
           videoId,
           url,
         },
+        needsConversion, // Flag indicating if client-side conversion is needed
       });
     } catch (error: any) {
       // Clean up temp files on error

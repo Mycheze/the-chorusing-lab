@@ -20,6 +20,10 @@ import { UserMenu } from "@/components/auth/UserMenu";
 import { AuthModal } from "@/components/auth/AuthModal";
 import { UploadModal } from "@/components/upload/UploadModal";
 import { useAuth } from "@/lib/auth";
+import {
+  convertAudioToCompatibleFormat,
+  needsConversion,
+} from "@/lib/audio/convert-audio";
 
 type InputMode = "file" | "youtube";
 
@@ -33,6 +37,8 @@ export default function ClipCreatorPage() {
   const [showCookieHelp, setShowCookieHelp] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
+  const [converting, setConverting] = useState(false);
+  const [conversionProgress, setConversionProgress] = useState(0);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
@@ -149,7 +155,7 @@ export default function ClipCreatorPage() {
           audioBlob.type
         );
 
-        const audioFile = new File([audioBlob], data.audio.filename, {
+        let audioFile = new File([audioBlob], data.audio.filename, {
           type: data.audio.mimeType,
         });
         console.log(
@@ -160,10 +166,55 @@ export default function ClipCreatorPage() {
           audioFile.type
         );
 
+        // Check if conversion is needed (MP4 container formats)
+        const shouldConvert =
+          data.needsConversion ||
+          needsConversion(audioFile.name, audioFile.type);
+
+        if (shouldConvert) {
+          console.log("🔄 MP4 file detected, converting to browser-compatible format...");
+          setConverting(true);
+          setConversionProgress(0);
+
+          try {
+            const convertedFile = await convertAudioToCompatibleFormat(
+              audioFile,
+              {
+                onProgress: (progress) => {
+                  setConversionProgress(progress);
+                },
+              }
+            );
+
+            console.log(
+              "✅ Conversion complete:",
+              audioFile.name,
+              "→",
+              convertedFile.name
+            );
+            audioFile = convertedFile; // Use converted file instead
+          } catch (conversionError) {
+            console.error("❌ Conversion failed:", conversionError);
+            // If conversion fails, we'll still try to use the original file
+            // The AudioEditor will show an error if it can't load it
+            setFileError(
+              "Downloaded successfully, but conversion failed. The file may not work in your browser. " +
+                (conversionError instanceof Error
+                  ? conversionError.message
+                  : "Unknown error")
+            );
+          } finally {
+            setConverting(false);
+            setConversionProgress(0);
+          }
+        }
+
         setSelectedFile(audioFile);
         // Store the YouTube URL as the source URL for extracted clips
         setSourceUrl(data.videoInfo?.url || youtubeUrl.trim());
-        setFileError(null);
+        if (!shouldConvert || !fileError) {
+          setFileError(null);
+        }
       } catch (decodeError) {
         console.error("❌ Failed to decode audio data:", decodeError);
         throw new Error(
@@ -428,10 +479,15 @@ export default function ClipCreatorPage() {
 
                       <button
                         onClick={handleYouTubeDownload}
-                        disabled={!youtubeUrl.trim() || downloading}
+                        disabled={!youtubeUrl.trim() || downloading || converting}
                         className="w-full px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                       >
-                        {downloading ? (
+                        {converting ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Converting... {Math.round(conversionProgress)}%
+                          </>
+                        ) : downloading ? (
                           <>
                             <Loader2 className="w-4 h-4 animate-spin" />
                             Downloading...
