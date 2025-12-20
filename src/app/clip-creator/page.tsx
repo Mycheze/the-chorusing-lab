@@ -109,7 +109,7 @@ export default function ClipCreatorPage() {
           "Content-Type": "application/json",
           ...getAuthHeaders(),
         },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           url: youtubeUrl.trim(),
           cookies: youtubeCookies.trim() || undefined,
         }),
@@ -336,7 +336,7 @@ export default function ClipCreatorPage() {
                           disabled={downloading}
                         />
                       </div>
-                      
+
                       {/* Cookie input (optional) */}
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
@@ -353,15 +353,28 @@ export default function ClipCreatorPage() {
                         </div>
                         {showCookieHelp && (
                           <div className="bg-blue-50 border border-blue-200 rounded-md p-3 text-sm text-blue-800">
-                            <p className="font-medium mb-2">How to export YouTube cookies:</p>
+                            <p className="font-medium mb-2">
+                              How to export YouTube cookies:
+                            </p>
                             <ol className="list-decimal list-inside space-y-1 ml-2">
-                              <li>Install a browser extension like "Get cookies.txt LOCALLY" (Chrome/Edge) or "cookies.txt" (Firefox)</li>
-                              <li>Go to youtube.com and make sure you're logged in</li>
-                              <li>Click the extension icon and export cookies for youtube.com</li>
+                              <li>
+                                Install a browser extension like "Get
+                                cookies.txt LOCALLY" (Chrome/Edge) or
+                                "cookies.txt" (Firefox)
+                              </li>
+                              <li>
+                                Go to youtube.com and make sure you're logged in
+                              </li>
+                              <li>
+                                Click the extension icon and export cookies for
+                                youtube.com
+                              </li>
                               <li>Paste the cookies content here</li>
                             </ol>
                             <p className="mt-2 text-xs">
-                              Cookies help avoid YouTube's bot detection. They're only used for downloading and aren't stored.
+                              Cookies help avoid YouTube's bot detection.
+                              They're only used for downloading and aren't
+                              stored.
                             </p>
                           </div>
                         )}
@@ -374,7 +387,7 @@ export default function ClipCreatorPage() {
                           disabled={downloading}
                         />
                       </div>
-                      
+
                       <button
                         onClick={handleYouTubeDownload}
                         disabled={!youtubeUrl.trim() || downloading}
