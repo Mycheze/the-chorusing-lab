@@ -399,16 +399,45 @@ export async function POST(request: NextRequest) {
         (f: any) =>
           f.acodec && f.acodec !== "none" && (!f.vcodec || f.vcodec === "none")
       );
-      console.log(`📊 Available audio formats: ${audioFormats.length} found`);
+      const nonMp4AudioFormats = audioFormats.filter(
+        (f: any) => f.ext && f.ext !== "mp4" && f.ext !== "m4v"
+      );
+      
+      console.log(`📊 Available formats: ${availableFormats.length} total`);
+      console.log(`📊 Audio-only formats: ${audioFormats.length} found`);
+      console.log(`📊 Non-MP4 audio formats: ${nonMp4AudioFormats.length} found`);
+      
       if (audioFormats.length > 0) {
         console.log(
-          `📊 Sample audio formats:`,
-          audioFormats.slice(0, 3).map((f: any) => ({
+          `📊 Audio format samples:`,
+          audioFormats.slice(0, 5).map((f: any) => ({
             format_id: f.format_id,
             ext: f.ext,
             acodec: f.acodec,
+            vcodec: f.vcodec,
           }))
         );
+      }
+      
+      // If we have non-MP4 audio formats, use a format ID instead of bestaudio
+      // This ensures we get a specific format that works
+      let selectedFormat: string | undefined;
+      if (nonMp4AudioFormats.length > 0) {
+        // Prefer MP3, WebM, Opus, OGG, M4A in that order
+        const preferredExts = ["mp3", "webm", "opus", "ogg", "m4a"];
+        for (const ext of preferredExts) {
+          const format = nonMp4AudioFormats.find((f: any) => f.ext === ext);
+          if (format) {
+            selectedFormat = format.format_id;
+            console.log(`✅ Selected format: ${format.format_id} (${ext})`);
+            break;
+          }
+        }
+        // If no preferred format found, use the first non-MP4 audio format
+        if (!selectedFormat && nonMp4AudioFormats.length > 0) {
+          selectedFormat = nonMp4AudioFormats[0].format_id;
+          console.log(`✅ Selected format (fallback): ${selectedFormat} (${nonMp4AudioFormats[0].ext})`);
+        }
       }
 
       // Download audio (extract audio only, prefer m4a format)
