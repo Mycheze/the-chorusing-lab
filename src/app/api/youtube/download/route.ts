@@ -474,7 +474,14 @@ export async function POST(request: NextRequest) {
       console.log("✅ Audio downloaded:", audioBuffer.length, "bytes");
 
       // Get the actual file extension
-      const actualExt = actualAudioFile.split(".").pop() || "m4a";
+      const actualExt = actualAudioFile.split(".").pop()?.toLowerCase() || "mp3";
+      
+      // Validate that we got an audio-only format (not video MP4)
+      // MP4 files often have metadata issues, prefer other formats
+      if (actualExt === "mp4" || actualExt === "m4v") {
+        console.warn("⚠️ Got MP4 file which may have metadata issues. File:", actualAudioFile);
+        // We'll still try to use it, but log a warning
+      }
 
       // Clean up audio file
       try {
@@ -491,13 +498,23 @@ export async function POST(request: NextRequest) {
 
       // Determine MIME type based on extension
       const mimeTypes: Record<string, string> = {
-        m4a: "audio/mp4",
-        webm: "audio/webm",
         mp3: "audio/mpeg",
+        webm: "audio/webm",
+        m4a: "audio/mp4",
         ogg: "audio/ogg",
         opus: "audio/opus",
+        // Avoid using video MIME types
+        mp4: "audio/mp4", // This might still fail, but it's what we have
+        m4v: "audio/mp4",
       };
-      const mimeType = mimeTypes[actualExt.toLowerCase()] || "audio/mp4";
+      const mimeType = mimeTypes[actualExt] || "audio/mpeg";
+      
+      console.log("📦 Final audio file info:", {
+        extension: actualExt,
+        mimeType,
+        filename,
+        size: audioBuffer.length,
+      });
 
       // Convert buffer to base64 for JSON response
       const audioBase64 = audioBuffer.toString("base64");
