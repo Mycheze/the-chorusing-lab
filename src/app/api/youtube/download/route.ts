@@ -402,11 +402,13 @@ export async function POST(request: NextRequest) {
       const nonMp4AudioFormats = audioFormats.filter(
         (f: any) => f.ext && f.ext !== "mp4" && f.ext !== "m4v"
       );
-      
+
       console.log(`📊 Available formats: ${availableFormats.length} total`);
       console.log(`📊 Audio-only formats: ${audioFormats.length} found`);
-      console.log(`📊 Non-MP4 audio formats: ${nonMp4AudioFormats.length} found`);
-      
+      console.log(
+        `📊 Non-MP4 audio formats: ${nonMp4AudioFormats.length} found`
+      );
+
       if (audioFormats.length > 0) {
         console.log(
           `📊 Audio format samples:`,
@@ -418,10 +420,23 @@ export async function POST(request: NextRequest) {
           }))
         );
       }
-      
+
       // If we have non-MP4 audio formats, use a format ID instead of bestaudio
       // This ensures we get a specific format that works
       let selectedFormat: string | undefined;
+      
+      // Check if we only have MP4/M4V formats available
+      if (audioFormats.length > 0 && nonMp4AudioFormats.length === 0) {
+        console.warn("⚠️ Only MP4/M4V audio formats available - these have browser compatibility issues");
+        // We can't convert MP4 to other formats without ffmpeg (not available in serverless)
+        // Reject with a clear error message
+        throw new Error(
+          "This video is only available in MP4 format, which has metadata parsing issues in browsers. " +
+          "Unfortunately, we cannot convert MP4 files to other formats in this serverless environment. " +
+          "Please try a different video, or use the direct file upload feature instead."
+        );
+      }
+      
       if (nonMp4AudioFormats.length > 0) {
         // Prefer MP3, WebM, Opus, OGG, M4A in that order
         const preferredExts = ["mp3", "webm", "opus", "ogg", "m4a"];
@@ -436,7 +451,9 @@ export async function POST(request: NextRequest) {
         // If no preferred format found, use the first non-MP4 audio format
         if (!selectedFormat && nonMp4AudioFormats.length > 0) {
           selectedFormat = nonMp4AudioFormats[0].format_id;
-          console.log(`✅ Selected format (fallback): ${selectedFormat} (${nonMp4AudioFormats[0].ext})`);
+          console.log(
+            `✅ Selected format (fallback): ${selectedFormat} (${nonMp4AudioFormats[0].ext})`
+          );
         }
       }
 
