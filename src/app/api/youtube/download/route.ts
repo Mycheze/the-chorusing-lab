@@ -303,12 +303,17 @@ export async function POST(request: NextRequest) {
     try {
       // First, get video info
       console.log("📊 Getting video info...");
+      console.log("📊 Using binary at:", binPath);
+      console.log("📊 Binary exists:", existsSync(binPath));
+      
       const infoResult = await youtubeDlExec(url, {
         dumpSingleJson: true,
         noWarnings: true,
         noCheckCertificates: true,
         preferFreeFormats: true,
         addHeader: ["referer:youtube.com", "user-agent:Mozilla/5.0"],
+        // Explicitly set the binary path if we downloaded it
+        ...(binPath && !binPath.includes("node_modules") ? { ytDlpPath: binPath } : {}),
       });
 
       // Handle type: when dumpSingleJson is true, result is a Payload object
@@ -325,6 +330,7 @@ export async function POST(request: NextRequest) {
 
       // Download audio (extract audio only, prefer m4a format)
       console.log("🎵 Downloading audio...");
+      console.log("🎵 Output path:", audioFilePath);
       await youtubeDlExec(url, {
         extractAudio: true,
         audioFormat: "m4a",
@@ -333,6 +339,8 @@ export async function POST(request: NextRequest) {
         noCheckCertificates: true,
         preferFreeFormats: true,
         addHeader: ["referer:youtube.com", "user-agent:Mozilla/5.0"],
+        // Explicitly set the binary path if we downloaded it
+        ...(binPath && !binPath.includes("node_modules") ? { ytDlpPath: binPath } : {}),
       });
 
       // Read the audio file
