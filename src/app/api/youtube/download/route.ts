@@ -392,19 +392,23 @@ export async function POST(request: NextRequest) {
         videoTitle,
         `(${videoDuration}s)`
       );
-      
+
       // Check available formats to help debug format selection issues
       const availableFormats = (info as any).formats || [];
-      const audioFormats = availableFormats.filter((f: any) => 
-        f.acodec && f.acodec !== "none" && (!f.vcodec || f.vcodec === "none")
+      const audioFormats = availableFormats.filter(
+        (f: any) =>
+          f.acodec && f.acodec !== "none" && (!f.vcodec || f.vcodec === "none")
       );
       console.log(`📊 Available audio formats: ${audioFormats.length} found`);
       if (audioFormats.length > 0) {
-        console.log(`📊 Sample audio formats:`, audioFormats.slice(0, 3).map((f: any) => ({
-          format_id: f.format_id,
-          ext: f.ext,
-          acodec: f.acodec,
-        })));
+        console.log(
+          `📊 Sample audio formats:`,
+          audioFormats.slice(0, 3).map((f: any) => ({
+            format_id: f.format_id,
+            ext: f.ext,
+            acodec: f.acodec,
+          }))
+        );
       }
 
       // Download audio (extract audio only, prefer m4a format)
