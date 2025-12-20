@@ -392,6 +392,20 @@ export async function POST(request: NextRequest) {
         videoTitle,
         `(${videoDuration}s)`
       );
+      
+      // Check available formats to help debug format selection issues
+      const availableFormats = (info as any).formats || [];
+      const audioFormats = availableFormats.filter((f: any) => 
+        f.acodec && f.acodec !== "none" && (!f.vcodec || f.vcodec === "none")
+      );
+      console.log(`📊 Available audio formats: ${audioFormats.length} found`);
+      if (audioFormats.length > 0) {
+        console.log(`📊 Sample audio formats:`, audioFormats.slice(0, 3).map((f: any) => ({
+          format_id: f.format_id,
+          ext: f.ext,
+          acodec: f.acodec,
+        })));
+      }
 
       // Download audio (extract audio only, prefer m4a format)
       console.log("🎵 Downloading audio...");
@@ -401,9 +415,10 @@ export async function POST(request: NextRequest) {
         // STRICTLY avoid MP4 - it has metadata parsing issues in browsers (especially Firefox)
         // Use format selection that explicitly avoids MP4 container
         // Prefer MP3 and WebM which are most browser-compatible
-        // Use format selection with fallbacks - this ensures we always get something
-        // Try preferred formats first, then fall back to any audio format
-        format: "bestaudio/best[height<=480]/best",
+        // Use format selection - try audio-only first, with fallbacks
+        // The format string tries bestaudio, but if that's not available,
+        // it will try to get the best format that has audio
+        format: "bestaudio/best",
         // Use output template to ensure we get the right extension
         output: join(tempDir, `audio-${timestamp}.%(ext)s`),
         noWarnings: true,
