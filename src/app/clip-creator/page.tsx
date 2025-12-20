@@ -358,12 +358,12 @@ export default function ClipCreatorPage() {
                             </p>
                             <ol className="list-decimal list-inside space-y-1 ml-2">
                               <li>
-                                Install a browser extension like "Get
-                                cookies.txt LOCALLY" (Chrome/Edge) or
-                                "cookies.txt" (Firefox)
+                                Install a browser extension like &quot;Get
+                                cookies.txt LOCALLY&quot; (Chrome/Edge) or
+                                &quot;cookies.txt&quot; (Firefox)
                               </li>
                               <li>
-                                Go to youtube.com and make sure you're logged in
+                                Go to youtube.com and make sure you&apos;re logged in
                               </li>
                               <li>
                                 Click the extension icon and export cookies for
@@ -372,8 +372,8 @@ export default function ClipCreatorPage() {
                               <li>Paste the cookies content here</li>
                             </ol>
                             <p className="mt-2 text-xs">
-                              Cookies help avoid YouTube's bot detection.
-                              They're only used for downloading and aren't
+                              Cookies help avoid YouTube&apos;s bot detection.
+                              They&apos;re only used for downloading and aren&apos;t
                               stored.
                             </p>
                           </div>
