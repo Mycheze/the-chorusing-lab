@@ -23,189 +23,158 @@ export async function convertAudioToCompatibleFormat(
 ): Promise<File> {
   const { onProgress, audioBitsPerSecond = 128000 } = options;
 
-  return new Promise((resolve, reject) => {
-    console.log(
-      "🔄 Starting audio conversion:",
-      audioFile.name,
-      audioFile.type
-    );
+  console.log(
+    "🔄 Starting audio conversion:",
+    audioFile.name,
+    audioFile.type
+  );
 
-    // Create an audio element from the file
-    const audioElement = new Audio();
-    const audioUrl = URL.createObjectURL(audioFile);
-    audioElement.src = audioUrl;
+  try {
+    // Read file as ArrayBuffer
+    const arrayBuffer = await audioFile.arrayBuffer();
+    console.log("📦 Read file as ArrayBuffer:", arrayBuffer.byteLength, "bytes");
 
-    // Set up timeout for loading
-    const loadTimeout = setTimeout(() => {
-      cleanup();
-      reject(new Error("Audio file took too long to load"));
-    }, 30000); // 30 second timeout
+    // Create AudioContext
+    const audioContext = new AudioContext();
+    let audioBuffer: AudioBuffer;
 
-    const cleanup = () => {
-      clearTimeout(loadTimeout);
-      URL.revokeObjectURL(audioUrl);
-    };
-
-    // Wait for the audio to load
-    audioElement.addEventListener("loadeddata", () => {
-      clearTimeout(loadTimeout);
-      console.log("✅ Audio loaded, duration:", audioElement.duration);
-
-      try {
-        // Create an AudioContext and MediaStreamDestination
-        const audioContext = new AudioContext();
-        const mediaStreamDestination =
-          audioContext.createMediaStreamDestination();
-
-        // Create a MediaStreamAudioSourceNode from the audio element
-        const source = audioContext.createMediaElementSource(audioElement);
-        source.connect(mediaStreamDestination);
-        source.connect(audioContext.destination); // Also connect to speakers
-
-        // Set up MediaRecorder to record as MP3 (or webm if MP3 not supported)
-        const mimeTypes = [
-          "audio/mpeg",
-          "audio/webm;codecs=opus",
-          "audio/webm",
-        ];
-        let selectedMimeType = "";
-
-        for (const mimeType of mimeTypes) {
-          if (MediaRecorder.isTypeSupported(mimeType)) {
-            selectedMimeType = mimeType;
-            break;
-          }
-        }
-
-        if (!selectedMimeType) {
-          cleanup();
-          audioContext.close();
-          reject(new Error("No supported audio encoding format found"));
-          return;
-        }
-
-        console.log("📹 Using MediaRecorder with:", selectedMimeType);
-
-        const mediaRecorder = new MediaRecorder(mediaStreamDestination.stream, {
-          mimeType: selectedMimeType,
-          audioBitsPerSecond,
-        });
-
-        const chunks: Blob[] = [];
-
-        mediaRecorder.addEventListener("dataavailable", (event) => {
-          if (event.data.size > 0) {
-            chunks.push(event.data);
-            if (onProgress) {
-              // Estimate progress based on data received
-              const estimatedProgress = Math.min(
-                95,
-                (chunks.reduce((sum, chunk) => sum + chunk.size, 0) /
-                  audioFile.size) *
-                  100
-              );
-              onProgress(estimatedProgress);
-            }
-          }
-        });
-
-        mediaRecorder.addEventListener("stop", () => {
-          const finalBlob = new Blob(chunks, { type: selectedMimeType });
-
-          // Determine file extension based on MIME type
-          let extension = "webm";
-          if (selectedMimeType.includes("mpeg")) {
-            extension = "mp3";
-          } else if (selectedMimeType.includes("opus")) {
-            extension = "webm";
-          }
-
-          // Create new filename with correct extension
-          const originalName = audioFile.name.replace(/\.[^/.]+$/, "");
-          const newFilename = `${originalName}.${extension}`;
-
-          const convertedFile = new File([finalBlob], newFilename, {
-            type: selectedMimeType,
-          });
-
-          console.log(
-            `✅ Conversion complete: ${audioFile.size} bytes → ${finalBlob.size} bytes`
-          );
-          console.log(
-            `📊 Size change: ${(
-              ((audioFile.size - finalBlob.size) / audioFile.size) *
-              100
-            ).toFixed(1)}%`
-          );
-
-          // Cleanup
-          audioContext.close();
-          cleanup();
-          if (onProgress) {
-            onProgress(100);
-          }
-          resolve(convertedFile);
-        });
-
-        mediaRecorder.addEventListener("error", (event) => {
-          console.error("❌ MediaRecorder error:", event);
-          cleanup();
-          audioContext.close();
-          reject(new Error("MediaRecorder error during conversion"));
-        });
-
-        // Start recording
-        mediaRecorder.start();
-        console.log("▶️ Started recording, playing audio...");
-
-        // Play the audio to trigger the recording
-        audioElement.currentTime = 0;
-        audioElement
-          .play()
-          .then(() => {
-            console.log("🎵 Audio playing, conversion in progress...");
-          })
-          .catch((playError) => {
-            console.error("❌ Failed to play audio:", playError);
-            mediaRecorder.stop();
-            cleanup();
-            audioContext.close();
-            reject(new Error("Failed to play audio for conversion"));
-          });
-
-        // Stop recording when audio finishes
-        audioElement.addEventListener("ended", () => {
-          console.log("⏹️ Audio ended, stopping recording...");
-          mediaRecorder.stop();
-        });
-
-        // Also stop if there's an error playing
-        audioElement.addEventListener("error", (error) => {
-          console.error("❌ Audio playback error:", error);
-          if (mediaRecorder.state !== "inactive") {
-            mediaRecorder.stop();
-          }
-          cleanup();
-          audioContext.close();
-          reject(new Error("Audio playback failed during conversion"));
-        });
-      } catch (error) {
-        cleanup();
-        reject(error);
-      }
-    });
-
-    audioElement.addEventListener("error", (error) => {
-      clearTimeout(loadTimeout);
-      console.error("❌ Audio loading error:", error);
-      cleanup();
-      reject(
-        new Error(
-          "Failed to load audio file. The file may be corrupted or in an unsupported format."
-        )
+    try {
+      // Try to decode audio data directly - this works even with MP4 metadata issues
+      audioBuffer = await audioContext.decodeAudioData(arrayBuffer.slice(0));
+      console.log(
+        "✅ Audio decoded successfully, duration:",
+        audioBuffer.duration,
+        "seconds"
       );
+    } catch (decodeError) {
+      console.error("❌ AudioContext.decodeAudioData failed:", decodeError);
+      audioContext.close();
+      throw new Error(
+        "Failed to decode audio file. The file may be corrupted or in an unsupported format."
+      );
+    }
+
+    // Create a MediaStreamDestination for recording
+    const mediaStreamDestination = audioContext.createMediaStreamDestination();
+
+    // Create a buffer source from the decoded audio
+    const source = audioContext.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(mediaStreamDestination);
+    source.connect(audioContext.destination);
+
+    // Set up MediaRecorder to record as MP3 (or webm if MP3 not supported)
+    const mimeTypes = [
+      "audio/mpeg",
+      "audio/webm;codecs=opus",
+      "audio/webm",
+    ];
+    let selectedMimeType = "";
+
+    for (const mimeType of mimeTypes) {
+      if (MediaRecorder.isTypeSupported(mimeType)) {
+        selectedMimeType = mimeType;
+        break;
+      }
+    }
+
+    if (!selectedMimeType) {
+      audioContext.close();
+      throw new Error("No supported audio encoding format found");
+    }
+
+    console.log("📹 Using MediaRecorder with:", selectedMimeType);
+
+    const mediaRecorder = new MediaRecorder(mediaStreamDestination.stream, {
+      mimeType: selectedMimeType,
+      audioBitsPerSecond,
     });
-  });
+
+    const chunks: Blob[] = [];
+
+    return new Promise((resolve, reject) => {
+      mediaRecorder.addEventListener("dataavailable", (event) => {
+        if (event.data.size > 0) {
+          chunks.push(event.data);
+          if (onProgress) {
+            // Estimate progress based on playback time
+            const estimatedProgress = Math.min(
+              95,
+              (chunks.reduce((sum, chunk) => sum + chunk.size, 0) /
+                (audioFile.size * 0.5)) * // Rough estimate
+                100
+            );
+            onProgress(estimatedProgress);
+          }
+        }
+      });
+
+      mediaRecorder.addEventListener("stop", () => {
+        const finalBlob = new Blob(chunks, { type: selectedMimeType });
+
+        // Determine file extension based on MIME type
+        let extension = "webm";
+        if (selectedMimeType.includes("mpeg")) {
+          extension = "mp3";
+        } else if (selectedMimeType.includes("opus")) {
+          extension = "webm";
+        }
+
+        // Create new filename with correct extension
+        const originalName = audioFile.name.replace(/\.[^/.]+$/, "");
+        const newFilename = `${originalName}.${extension}`;
+
+        const convertedFile = new File([finalBlob], newFilename, {
+          type: selectedMimeType,
+        });
+
+        console.log(
+          `✅ Conversion complete: ${audioFile.size} bytes → ${finalBlob.size} bytes`
+        );
+        console.log(
+          `📊 Size change: ${(
+            ((audioFile.size - finalBlob.size) / audioFile.size) *
+            100
+          ).toFixed(1)}%`
+        );
+
+        // Cleanup
+        audioContext.close();
+        if (onProgress) {
+          onProgress(100);
+        }
+        resolve(convertedFile);
+      });
+
+      mediaRecorder.addEventListener("error", (event) => {
+        console.error("❌ MediaRecorder error:", event);
+        audioContext.close();
+        reject(new Error("MediaRecorder error during conversion"));
+      });
+
+      // Start recording
+      mediaRecorder.start();
+      console.log("▶️ Started recording, playing audio buffer...");
+
+      // Play the audio buffer
+      source.start(0);
+
+      // Stop recording when audio finishes
+      const durationMs = audioBuffer.duration * 1000;
+      setTimeout(() => {
+        if (mediaRecorder.state !== "inactive") {
+          console.log("⏹️ Stopping recording...");
+          mediaRecorder.stop();
+        }
+        source.stop();
+      }, durationMs + 100); // Add 100ms buffer
+    });
+  } catch (error) {
+    console.error("❌ Conversion failed:", error);
+    throw error instanceof Error
+      ? error
+      : new Error("Audio conversion failed");
+  }
 }
 
 /**
