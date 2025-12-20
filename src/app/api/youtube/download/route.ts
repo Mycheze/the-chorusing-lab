@@ -343,7 +343,10 @@ export async function POST(request: NextRequest) {
         (finalBinPath.includes("/tmp") ||
           !finalBinPath.includes("node_modules"))
       ) {
-        console.log("📊 Creating custom youtube-dl-exec instance with path:", finalBinPath);
+        console.log(
+          "📊 Creating custom youtube-dl-exec instance with path:",
+          finalBinPath
+        );
         execFunction = createYoutubeDl(finalBinPath);
       } else {
         execFunction = youtubeDlExec;
