@@ -160,7 +160,7 @@ export function AudioEditor({ file, sourceUrl }: AudioEditorProps) {
             });
             clearTimeout(timeout);
             let errorMsg = audioError?.message || "Test audio failed to load";
-            
+
             // Provide user-friendly message for MP4 metadata errors
             if (
               errorMsg.includes("NS_ERROR_DOM_MEDIA_METADATA_ERR") ||
@@ -171,7 +171,7 @@ export function AudioEditor({ file, sourceUrl }: AudioEditorProps) {
                 "NS_ERROR_DOM_MEDIA_METADATA_ERR - This MP4 file has metadata parsing issues in your browser. " +
                 "Please try downloading the video again, or use a different video if available.";
             }
-            
+
             reject(
               new Error(
                 `Audio loading error: ${errorMsg} (Code: ${
@@ -240,7 +240,7 @@ export function AudioEditor({ file, sourceUrl }: AudioEditorProps) {
           if (err.name === "AbortError") return;
 
           let errorMessage = err.message || "Failed to load audio";
-          
+
           // Provide user-friendly message for MP4 metadata errors
           if (
             errorMessage.includes("NS_ERROR_DOM_MEDIA_METADATA_ERR") ||
@@ -252,7 +252,7 @@ export function AudioEditor({ file, sourceUrl }: AudioEditorProps) {
               "This often happens with MP4 files. Please try downloading the video again, or use a different video if available. " +
               "If the problem persists, the video may only be available in a format that has compatibility issues.";
           }
-          
+
           setError(errorMessage);
           setIsLoading(false);
           initializationRef.current = false;
