@@ -80,7 +80,7 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
   const [searchTerm, setSearchTerm] = useState(
     () => searchParams.get("search") || ""
   );
-  const [showFilters, setShowFilters] = useState(false);
+  const [showFilters, setShowFilters] = useState(true);
   const [showStarred, setShowStarred] = useState(
     () => searchParams.get("starred") === "true"
   );
@@ -140,8 +140,8 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
       params.set("sortField", newSort.field);
       params.set("sortDirection", newSort.direction);
 
-      // Add search
-      if (newSearchTerm) params.set("search", newSearchTerm);
+      // Add search (only if not empty)
+      if (newSearchTerm.trim()) params.set("search", newSearchTerm.trim());
 
       // Update URL without causing a page reload
       router.replace(`${pathname}?${params.toString()}`, { scroll: false });
@@ -241,6 +241,8 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
   };
 
   // Debounce search term URL updates (only for search term, other filters update immediately)
+  // Use a longer debounce (1.5s) so URL only updates when user has stopped typing
+  // This prevents reload-like behavior while still preserving search in URL
   useEffect(() => {
     const timeoutId = setTimeout(() => {
       // Use refs to get latest values without causing re-renders
@@ -251,7 +253,7 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
         showStarredRef.current,
         showMyUploadsRef.current
       );
-    }, 300);
+    }, 1500);
     return () => clearTimeout(timeoutId);
   }, [searchTerm, updateURL]); // Only debounce search term changes
 
@@ -587,9 +589,30 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
           <div className="p-8 text-center text-gray-500">
             <div className="text-4xl mb-4">🎵</div>
             <p className="text-lg font-medium mb-2">No clips found</p>
-            <p className="text-sm">
-              Try adjusting your search terms or filters
-            </p>
+            {filters.language ||
+            filters.speakerGender ||
+            filters.speakerAgeRange ||
+            (filters.tags && filters.tags.length > 0) ||
+            showStarred ||
+            showMyUploads ||
+            searchTerm ? (
+              <div className="space-y-3">
+                <p className="text-sm">
+                  There are no clips matching your filters, but you can add some
+                  with the Clip Creator!
+                </p>
+                <Link
+                  href="/clip-creator"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 text-sm font-medium"
+                >
+                  Go to Clip Creator
+                </Link>
+              </div>
+            ) : (
+              <p className="text-sm">
+                Try adjusting your search terms or filters
+              </p>
+            )}
           </div>
         ) : (
           <div className="divide-y divide-gray-200">

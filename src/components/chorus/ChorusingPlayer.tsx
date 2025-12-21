@@ -493,9 +493,11 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
 
     const handleKeyDown = (e: KeyboardEvent) => {
       // Don't trigger shortcuts if user is typing in an input or textarea
+      // But allow shortcuts when using range inputs (sliders)
       if (
         e.target instanceof HTMLTextAreaElement ||
-        e.target instanceof HTMLInputElement
+        (e.target instanceof HTMLInputElement &&
+          (e.target as HTMLInputElement).type !== "range")
       ) {
         return;
       }
@@ -724,7 +726,7 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
                   type="range"
                   min="0.5"
                   max="2.0"
-                  step="0.1"
+                  step="0.05"
                   value={playbackRate}
                   onChange={(e) =>
                     changePlaybackRate(parseFloat(e.target.value))
@@ -732,10 +734,26 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
                   className="w-20"
                 />
                 <span className="text-xs text-gray-600 min-w-[2.5rem]">
-                  {playbackRate.toFixed(1)}x
+                  {playbackRate.toFixed(2)}x
                 </span>
               </div>
             </div>
+          </div>
+
+          {/* Keyboard Shortcuts Info */}
+          <div className="text-xs text-gray-600 bg-gray-50 rounded-md p-3">
+            <p>
+              <kbd className="keyboard-hint">Space</kbd> Play/Pause •{" "}
+              <kbd className="keyboard-hint">S</kbd> Stop •{" "}
+              <kbd className="keyboard-hint">R</kbd> Restart •{" "}
+              <kbd className="keyboard-hint">L</kbd> Toggle Loop
+              {region && (
+                <>
+                  {" • "}
+                  <kbd className="keyboard-hint">Q</kbd> Clear Selection
+                </>
+              )}
+            </p>
           </div>
         </div>
       )}

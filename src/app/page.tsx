@@ -184,6 +184,23 @@ export default function HomePage() {
                 </div>
               </div>
 
+              {/* Tutorial Video */}
+              <div className="bg-white rounded-xl p-8 shadow-sm border border-gray-200 mb-8">
+                <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+                  <Zap className="w-6 h-6 text-indigo-600" />
+                  Tutorial
+                </h2>
+                <div className="aspect-video w-full max-w-4xl mx-auto">
+                  <iframe
+                    className="w-full h-full rounded-lg"
+                    src="https://www.youtube.com/embed/QDSYeYA2qxQ"
+                    title="Chorus Lab Tutorial"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                  />
+                </div>
+              </div>
+
               {/* Getting Started */}
               <div className="bg-white rounded-xl p-8 shadow-sm border border-gray-200 mb-8">
                 <h2 className="text-2xl font-bold text-gray-900 mb-6">
