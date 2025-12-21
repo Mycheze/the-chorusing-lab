@@ -54,7 +54,6 @@ export default function ClipCreatorPage() {
 
     // Validate file
     const maxSize = 100 * 1024 * 1024; // 100MB for source files
-    const maxDuration = 30 * 60; // 30 minutes in seconds
     const supportedFormats = ["mp3", "wav", "m4a", "ogg", "webm"];
 
     const extension = file.name.split(".").pop()?.toLowerCase();
@@ -71,17 +70,11 @@ export default function ClipCreatorPage() {
       return;
     }
 
-    // Check duration by creating audio element
+    // Verify audio file is readable (no duration limit for local processing)
     const audio = new Audio();
     const objectUrl = URL.createObjectURL(file);
 
     audio.addEventListener("loadedmetadata", () => {
-      if (audio.duration > maxDuration) {
-        setFileError("Audio too long. Maximum duration is 30 minutes.");
-        URL.revokeObjectURL(objectUrl);
-        return;
-      }
-
       setSelectedFile(file);
       setFileError(null);
       URL.revokeObjectURL(objectUrl);
@@ -404,7 +397,7 @@ export default function ClipCreatorPage() {
                           Choose audio file
                         </label>
                         <p className="text-sm text-gray-500 mt-2">
-                          MP3, WAV, M4A, OGG, WebM (max 100MB, 30 minutes)
+                          MP3, WAV, M4A, OGG, WebM (max 100MB)
                         </p>
                       </div>
                     </div>
