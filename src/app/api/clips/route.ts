@@ -49,6 +49,11 @@ export async function GET(request: NextRequest) {
       filters.speakerAgeRange = speakerAgeRange as any;
     }
 
+    const speakerDialect = searchParams.get("speakerDialect");
+    if (speakerDialect) {
+      filters.speakerDialect = speakerDialect;
+    }
+
     const uploadedBy = searchParams.get("uploadedBy");
     if (uploadedBy) {
       filters.uploadedBy = uploadedBy;

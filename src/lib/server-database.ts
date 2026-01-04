@@ -2,7 +2,7 @@
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
 import type { User } from "@/types/auth";
-import type { AudioClip, AudioFilters, AudioSort } from "@/types/audio";
+import type { AudioClip, AudioFilters, AudioSort, FilterPreferences } from "@/types/audio";
 import {
   convertAudioClipFromDb,
   convertAudioClipToDb,
@@ -300,6 +300,9 @@ class SupabaseDatabase {
       }
       if (filters.speakerAgeRange) {
         query = query.eq("speaker_age_range", filters.speakerAgeRange);
+      }
+      if (filters.speakerDialect) {
+        query = query.eq("speaker_dialect", filters.speakerDialect);
       }
       if (filters.uploadedBy) {
         query = query.eq("uploaded_by", filters.uploadedBy);
@@ -645,6 +648,128 @@ class SupabaseDatabase {
     }
 
     return data.map((star) => star.clip_id);
+  }
+
+  // User filter preferences methods
+  async getUserFilterPreferences(
+    userId: string,
+    accessToken?: string
+  ): Promise<FilterPreferences | null> {
+    const client = this.getAuthenticatedClient(accessToken);
+
+    const { data, error } = await client
+      .from("profiles")
+      .select("filter_preferences")
+      .eq("id", userId)
+      .single();
+
+    if (error) {
+      // If profile doesn't exist or other error, return null
+      if (error.code === "PGRST116") {
+        // No rows returned
+        return null;
+      }
+      // If column doesn't exist yet (database migration not run), return null gracefully
+      if (error.message?.includes("does not exist") || error.message?.includes("column")) {
+        console.warn("filter_preferences column does not exist yet. Please run the database migration.");
+        return null;
+      }
+      throw new Error(`Failed to get user filter preferences: ${error.message}`);
+    }
+
+    if (!data || !data.filter_preferences) {
+      return null;
+    }
+
+    // Parse JSONB and validate structure
+    try {
+      const preferences = data.filter_preferences as any;
+      // Validate and return only the expected fields
+      const result: FilterPreferences = {};
+      if (preferences.language && typeof preferences.language === "string") {
+        result.language = preferences.language;
+      }
+      if (
+        preferences.speakerGender &&
+        ["male", "female", "other"].includes(preferences.speakerGender)
+      ) {
+        result.speakerGender = preferences.speakerGender;
+      }
+      if (
+        preferences.speakerAgeRange &&
+        ["teen", "younger-adult", "adult", "senior"].includes(
+          preferences.speakerAgeRange
+        )
+      ) {
+        result.speakerAgeRange = preferences.speakerAgeRange;
+      }
+      if (
+        preferences.speakerDialect &&
+        typeof preferences.speakerDialect === "string"
+      ) {
+        result.speakerDialect = preferences.speakerDialect;
+      }
+
+      // Return null if no valid preferences found
+      return Object.keys(result).length > 0 ? result : null;
+    } catch (parseError) {
+      console.error("Failed to parse filter preferences:", parseError);
+      return null;
+    }
+  }
+
+  async saveUserFilterPreferences(
+    userId: string,
+    preferences: FilterPreferences | null,
+    accessToken?: string
+  ): Promise<void> {
+    const client = this.getAuthenticatedClient(accessToken);
+
+    // Handle null preferences (clearing them)
+    if (!preferences) {
+      const { error } = await client
+        .from("profiles")
+        .update({ filter_preferences: null })
+        .eq("id", userId);
+
+      if (error) {
+        throw new Error(`Failed to save user filter preferences: ${error.message}`);
+      }
+      return;
+    }
+
+    // Only save the preference fields, ignore any extra fields
+    const preferencesToSave: FilterPreferences = {};
+    if (preferences.language) {
+      preferencesToSave.language = preferences.language;
+    }
+    if (preferences.speakerGender) {
+      preferencesToSave.speakerGender = preferences.speakerGender;
+    }
+    if (preferences.speakerAgeRange) {
+      preferencesToSave.speakerAgeRange = preferences.speakerAgeRange;
+    }
+    if (preferences.speakerDialect) {
+      preferencesToSave.speakerDialect = preferences.speakerDialect;
+    }
+
+    // If all preferences are empty, save null to clear them
+    const valueToSave =
+      Object.keys(preferencesToSave).length > 0 ? preferencesToSave : null;
+
+    const { error } = await client
+      .from("profiles")
+      .update({ filter_preferences: valueToSave })
+      .eq("id", userId);
+
+    if (error) {
+      // If column doesn't exist yet (database migration not run), log warning but don't throw
+      if (error.message?.includes("does not exist") || error.message?.includes("column")) {
+        console.warn("filter_preferences column does not exist yet. Please run the database migration.");
+        return; // Silently fail - user needs to run migration
+      }
+      throw new Error(`Failed to save user filter preferences: ${error.message}`);
+    }
   }
 }
 

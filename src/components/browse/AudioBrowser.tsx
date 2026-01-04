@@ -18,13 +18,14 @@ import {
   Upload,
   Trash2,
   Zap,
+  Info,
 } from "lucide-react";
 import Link from "next/link";
 import { AudioPlayer } from "@/components/audio/AudioPlayer";
 import { EditClipModal } from "./EditClipModal";
 import { LanguageSelector } from "@/components/ui/LanguageSelector";
 import { useAuth } from "@/lib/auth";
-import type { AudioClip, AudioFilters, AudioSort } from "@/types/audio";
+import type { AudioClip, AudioFilters, AudioSort, FilterPreferences } from "@/types/audio";
 
 interface AudioBrowserProps {
   onRefresh?: () => void;
@@ -61,11 +62,13 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
     const language = searchParams.get("language");
     const speakerGender = searchParams.get("speakerGender");
     const speakerAgeRange = searchParams.get("speakerAgeRange");
+    const speakerDialect = searchParams.get("speakerDialect");
     const tags = searchParams.get("tags");
 
     if (language) urlFilters.language = language;
     if (speakerGender) urlFilters.speakerGender = speakerGender as any;
     if (speakerAgeRange) urlFilters.speakerAgeRange = speakerAgeRange as any;
+    if (speakerDialect) urlFilters.speakerDialect = speakerDialect;
     if (tags) urlFilters.tags = tags.split(",").filter(Boolean);
 
     return urlFilters;
@@ -98,6 +101,14 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
   const showStarredRef = useRef(showStarred);
   const showMyUploadsRef = useRef(showMyUploads);
 
+  // Refs for preference management
+  const preferencesLoadedRef = useRef(false);
+  const lastSavedPreferencesRef = useRef<FilterPreferences | null>(null);
+
+  // State for available dialects
+  const [availableDialects, setAvailableDialects] = useState<string[]>([]);
+  const [loadingDialects, setLoadingDialects] = useState(false);
+
   // Keep refs in sync
   useEffect(() => {
     filtersRef.current = filters;
@@ -114,6 +125,104 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
   useEffect(() => {
     showMyUploadsRef.current = showMyUploads;
   }, [showMyUploads]);
+
+  // Save preferences when preference filters change (debounced)
+  useEffect(() => {
+    if (!user) return;
+    // Allow saves immediately - if preferences haven't loaded yet, that's fine
+    // We'll just overwrite whatever was there before
+
+    // Extract only preference fields
+    const currentPreferences: FilterPreferences = {};
+    if (filters.language) {
+      currentPreferences.language = filters.language;
+    }
+    if (filters.speakerGender) {
+      currentPreferences.speakerGender = filters.speakerGender;
+    }
+    if (filters.speakerAgeRange) {
+      currentPreferences.speakerAgeRange = filters.speakerAgeRange;
+    }
+    if (filters.speakerDialect) {
+      currentPreferences.speakerDialect = filters.speakerDialect;
+    }
+
+    // Check if preferences have changed
+    const lastSaved = lastSavedPreferencesRef.current;
+    const hasChanged =
+      !lastSaved ||
+      lastSaved.language !== currentPreferences.language ||
+      lastSaved.speakerGender !== currentPreferences.speakerGender ||
+      lastSaved.speakerAgeRange !== currentPreferences.speakerAgeRange ||
+      lastSaved.speakerDialect !== currentPreferences.speakerDialect;
+
+    if (!hasChanged) return;
+
+    // Debounce save (1.5 seconds, matching search term debounce)
+    const timeoutId = setTimeout(async () => {
+      try {
+        const headers = getAuthHeaders();
+        const response = await fetch("/api/user/preferences", {
+          method: "PUT",
+          headers: {
+            ...headers,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            preferences:
+              Object.keys(currentPreferences).length > 0
+                ? currentPreferences
+                : null,
+          }),
+        });
+
+        if (response.ok) {
+          // Update last saved preferences
+          lastSavedPreferencesRef.current =
+            Object.keys(currentPreferences).length > 0
+              ? currentPreferences
+              : null;
+          console.log("✅ Preferences saved:", currentPreferences);
+        } else {
+          const errorData = await response.json().catch(() => ({}));
+          console.error("Failed to save preferences:", errorData);
+        }
+      } catch (error) {
+        // Silently handle errors - don't break UI
+        console.error("Failed to save preferences:", error);
+      }
+    }, 1500);
+
+    return () => clearTimeout(timeoutId);
+  }, [filters.language, filters.speakerGender, filters.speakerAgeRange, filters.speakerDialect, user, getAuthHeaders]);
+
+  // Fetch available dialects when language changes
+  useEffect(() => {
+    if (!filters.language) {
+      setAvailableDialects([]);
+      return;
+    }
+
+    const fetchDialects = async () => {
+      setLoadingDialects(true);
+      try {
+        const response = await fetch(`/api/dialects?language=${encodeURIComponent(filters.language)}`);
+        if (response.ok) {
+          const data = await response.json();
+          setAvailableDialects(data.dialects || []);
+        } else {
+          setAvailableDialects([]);
+        }
+      } catch (error) {
+        console.error("Failed to fetch dialects:", error);
+        setAvailableDialects([]);
+      } finally {
+        setLoadingDialects(false);
+      }
+    };
+
+    fetchDialects();
+  }, [filters.language]);
 
   // Update URL when filters change
   const updateURL = useCallback(
@@ -132,6 +241,8 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
         params.set("speakerGender", newFilters.speakerGender);
       if (newFilters.speakerAgeRange)
         params.set("speakerAgeRange", newFilters.speakerAgeRange);
+      if (newFilters.speakerDialect)
+        params.set("speakerDialect", newFilters.speakerDialect);
       if (newFilters.tags && newFilters.tags.length > 0) {
         params.set("tags", newFilters.tags.join(","));
       }
@@ -152,6 +263,116 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
     },
     [router, pathname]
   );
+
+  // Load user preferences on mount (only if no URL params for preference fields)
+  useEffect(() => {
+    if (preferencesLoadedRef.current) return;
+    if (!user) {
+      preferencesLoadedRef.current = true; // Mark as loaded even if no user
+      return;
+    }
+
+    // Check if URL has any preference filter params
+    const hasUrlPreferenceParams =
+      searchParams?.get("language") ||
+      searchParams?.get("speakerGender") ||
+      searchParams?.get("speakerAgeRange") ||
+      searchParams?.get("speakerDialect");
+
+    // If URL has preference params, still load saved preferences to sync lastSavedPreferencesRef
+    // but don't apply them to filters (URL takes precedence)
+    if (hasUrlPreferenceParams) {
+      // Still load preferences to sync lastSavedPreferencesRef, but don't apply them
+      const loadPreferencesForSync = async () => {
+        try {
+          const headers = getAuthHeaders();
+          const response = await fetch("/api/user/preferences", {
+            headers,
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            const preferences: FilterPreferences | null = data.preferences;
+            // Sync lastSavedPreferencesRef so saves work correctly
+            lastSavedPreferencesRef.current = preferences;
+          } else {
+            lastSavedPreferencesRef.current = null;
+          }
+        } catch (error) {
+          console.error("Failed to load preferences for sync:", error);
+          lastSavedPreferencesRef.current = null;
+        } finally {
+          preferencesLoadedRef.current = true;
+        }
+      };
+
+      loadPreferencesForSync();
+      return;
+    }
+
+    // Load preferences from API
+    const loadPreferences = async () => {
+      try {
+        const headers = getAuthHeaders();
+        const response = await fetch("/api/user/preferences", {
+          headers,
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const preferences: FilterPreferences | null = data.preferences;
+
+          if (preferences) {
+            console.log("✅ Loaded preferences:", preferences);
+            // Build new filters with preferences applied
+            const newFilters: AudioFilters = {
+              ...filtersRef.current,
+            };
+            if (preferences.language) {
+              newFilters.language = preferences.language;
+            }
+            if (preferences.speakerGender) {
+              newFilters.speakerGender = preferences.speakerGender;
+            }
+            if (preferences.speakerAgeRange) {
+              newFilters.speakerAgeRange = preferences.speakerAgeRange;
+            }
+            if (preferences.speakerDialect) {
+              newFilters.speakerDialect = preferences.speakerDialect;
+            }
+
+            // Apply preferences to filters state
+            setFilters(newFilters);
+
+            // Update URL to reflect applied preferences (use setTimeout to avoid render warning)
+            setTimeout(() => {
+              updateURL(
+                newFilters,
+                sortRef.current,
+                searchTerm,
+                showStarredRef.current,
+                showMyUploadsRef.current
+              );
+            }, 0);
+
+            // Track last saved preferences
+            lastSavedPreferencesRef.current = preferences;
+          } else {
+            // No preferences saved yet
+            lastSavedPreferencesRef.current = null;
+          }
+        }
+      } catch (error) {
+        // Silently handle errors - don't break UI
+        console.error("Failed to load preferences:", error);
+        lastSavedPreferencesRef.current = null;
+      } finally {
+        preferencesLoadedRef.current = true;
+      }
+    };
+
+    loadPreferences();
+  }, [user, searchParams, getAuthHeaders, updateURL, searchTerm]);
 
   const fetchClips = useCallback(async () => {
     setLoading(true);
@@ -220,7 +441,12 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
 
   const handleLanguageFilterChange = (language: string) => {
     setFilters((prev) => {
-      const newFilters = { ...prev, language: language || undefined };
+      const newFilters = { 
+        ...prev, 
+        language: language || undefined,
+        // Clear dialect when language changes
+        speakerDialect: language ? prev.speakerDialect : undefined
+      };
       updateURL(newFilters, sort, searchTerm, showStarred, showMyUploads);
       return newFilters;
     });
@@ -485,7 +711,7 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
         </div>
 
         {showFilters && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-gray-200">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pt-4 border-t border-gray-200">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Language
@@ -540,7 +766,49 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
               </select>
             </div>
 
-            <div className="md:col-span-3 flex justify-end">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                <div className="flex items-center gap-1">
+                  Dialect
+                  {filters.language && (
+                    <div className="relative group">
+                      <Info className="w-4 h-4 text-gray-400 hover:text-gray-600 cursor-help" />
+                      <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block z-10 w-64 p-2 bg-gray-900 text-white text-xs rounded-md shadow-lg">
+                        Don't see your target dialect? That's because no one has added clips for it yet! You can be the first.
+                        <div className="absolute left-2 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </label>
+              <select
+                value={filters.speakerDialect || ""}
+                onChange={(e) =>
+                  handleFilterChange(
+                    "speakerDialect",
+                    e.target.value || undefined
+                  )
+                }
+                disabled={!filters.language || loadingDialects}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+              >
+                <option value="">
+                  {loadingDialects ? "Loading dialects..." : "All Dialects"}
+                </option>
+                {availableDialects.map((dialect) => (
+                  <option key={dialect} value={dialect}>
+                    {dialect}
+                  </option>
+                ))}
+              </select>
+              {!filters.language && (
+                <p className="mt-1 text-xs text-gray-500">
+                  Select a language first to choose a dialect
+                </p>
+              )}
+            </div>
+
+            <div className="md:col-span-2 lg:col-span-4 flex justify-end">
               <button
                 onClick={clearFilters}
                 className="text-sm text-indigo-600 hover:text-indigo-700 font-medium"

@@ -93,6 +93,7 @@ export interface AudioFilters {
   language?: string; // Now supports any language string
   speakerGender?: 'male' | 'female' | 'other';
   speakerAgeRange?: 'teen' | 'younger-adult' | 'adult' | 'senior'; // Updated age ranges
+  speakerDialect?: string;
   tags?: string[];
   uploadedBy?: string;
 }
@@ -100,6 +101,14 @@ export interface AudioFilters {
 export interface AudioSort {
   field: 'title' | 'duration' | 'language' | 'createdAt';
   direction: 'asc' | 'desc';
+}
+
+// User filter preferences (saved to database)
+export interface FilterPreferences {
+  language?: string;
+  speakerGender?: 'male' | 'female' | 'other';
+  speakerAgeRange?: 'teen' | 'younger-adult' | 'adult' | 'senior';
+  speakerDialect?: string;
 }
 
 // Event types for audio player
