@@ -17,7 +17,7 @@ const nextConfig = {
       bodySizeLimit: "50mb",
     },
     // Packages that should not be bundled (for server-side)
-    serverComponentsExternalPackages: ["youtube-dl-exec"],
+    serverComponentsExternalPackages: [],
   },
 
   // Audio file handling
@@ -31,35 +31,6 @@ const nextConfig = {
       },
     });
 
-    // Exclude problematic packages from bundling (server-side only)
-    // These packages use modern JS features (private class fields) that webpack can't parse
-    if (isServer) {
-      // Add externals function to exclude youtube-dl-exec if needed
-      const originalExternals = config.externals;
-      const externalFunction = ({ request }, callback) => {
-        // Check if the request matches youtube-dl-exec
-        if (
-          request === "youtube-dl-exec" ||
-          (typeof request === "string" &&
-            request.startsWith("youtube-dl-exec/"))
-        ) {
-          return callback(null, `commonjs ${request}`);
-        }
-        // Call original externals if it's a function
-        if (typeof originalExternals === "function") {
-          return originalExternals({ request }, callback);
-        }
-        callback();
-      };
-
-      if (Array.isArray(originalExternals)) {
-        config.externals = [...originalExternals, externalFunction];
-      } else if (originalExternals) {
-        config.externals = [originalExternals, externalFunction];
-      } else {
-        config.externals = externalFunction;
-      }
-    }
 
     // Optimize for audio processing
     if (!isServer) {
