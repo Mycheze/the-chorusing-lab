@@ -102,12 +102,14 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
   const showStarredRef = useRef(showStarred);
   const showMyUploadsRef = useRef(showMyUploads);
   const fetchClipsRef = useRef<typeof fetchClips>();
+  const clipsLengthRef = useRef(clips.length);
 
   // Refs for preference management
   const preferencesLoadedRef = useRef(false);
   const lastSavedPreferencesRef = useRef<FilterPreferences | null>(null);
   
-  // Track if initial load has completed
+  // Track if initial load has completed (use state so we can use it in render)
+  const [hasInitialLoad, setHasInitialLoad] = useState(false);
   const hasInitialLoadRef = useRef(false);
 
   // State for available dialects
@@ -130,6 +132,10 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
   useEffect(() => {
     showMyUploadsRef.current = showMyUploads;
   }, [showMyUploads]);
+
+  useEffect(() => {
+    clipsLengthRef.current = clips.length;
+  }, [clips.length]);
 
   // Save preferences when preference filters change (debounced)
   useEffect(() => {
@@ -435,11 +441,12 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
     }
   }, [filters, sort, showStarred, showMyUploads, getAuthHeaders]);
 
-  // Initial load only
+  // Initial load only - use full-page spinner only if we have no clips
   useEffect(() => {
     if (!hasInitialLoadRef.current) {
       fetchClips(false);
       hasInitialLoadRef.current = true;
+      setHasInitialLoad(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Only run on mount - fetchClips is stable on first render
@@ -447,9 +454,12 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
   // Handle refresh from parent
   useEffect(() => {
     if (onRefresh) {
-      fetchClips(false);
+      // After initial load, always use background loading for refreshes too
+      const isFilterChange = hasInitialLoadRef.current;
+      fetchClips(isFilterChange);
     }
-  }, [onRefresh]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onRefresh]); // Use background loading if initial load has completed
 
   // Keep fetchClips ref in sync
   useEffect(() => {
@@ -457,20 +467,27 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
   }, [fetchClips]);
 
   // Watch for filter/sort changes and fetch in background
+  // This includes: filters, sort, showStarred, showMyUploads
   useEffect(() => {
     // Skip if initial load hasn't happened yet
     if (!hasInitialLoadRef.current) return;
+    
+    // ALWAYS use background loading after initial load completes
+    // This ensures smooth transitions for ALL filter changes including Starred/My Uploads
+    // The only time we show full-page spinner is on the very first mount
+    const isFilterChange = true;
     
     // Fetch with isFilterChange=true to show subtle loading indicator
     // Use a timeout to batch rapid filter changes
     const timeoutId = setTimeout(() => {
       if (fetchClipsRef.current) {
-        fetchClipsRef.current(true);
+        fetchClipsRef.current(isFilterChange);
       }
     }, 0);
     
     return () => clearTimeout(timeoutId);
-  }, [filters, sort, showStarred, showMyUploads]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters, sort, showStarred, showMyUploads]); // All filter changes use background loading
 
   const handleFilterChange = (key: keyof AudioFilters, value: any) => {
     setFilters((prev) => {
@@ -677,7 +694,8 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
     return new Date(dateString).toLocaleDateString();
   };
 
-  // Only show full-page spinner on initial load when there are no clips
+  // Only show full-page spinner on initial load when we have no clips yet
+  // After initial load, all changes use background loading (isFiltering state) and clips stay visible
   if (loading && clips.length === 0) {
     return (
       <div className="flex items-center justify-center p-8">
