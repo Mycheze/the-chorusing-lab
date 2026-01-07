@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
+import { supabaseMonitor } from "./supabase-monitor";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -15,6 +16,9 @@ if (!supabaseAnonKey) {
   );
   throw new Error("Missing env var: NEXT_PUBLIC_SUPABASE_ANON_KEY");
 }
+
+// Track client instance
+const clientId = supabaseMonitor.registerClient('anonymous');
 
 // Create a single supabase client for interacting with your database
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
@@ -82,6 +86,9 @@ export const verifyAccessToken = async (accessToken: string) => {
 // This creates a client with the access token that RLS policies can use
 // Use this for database/storage operations, NOT for token verification
 export const createAuthenticatedClient = (accessToken: string) => {
+  // Track client instance
+  const authClientId = supabaseMonitor.registerClient('authenticated');
+  
   // Create client with auth token in headers
   // The key is to also set it in the auth context for RLS
   const client = createClient<Database>(supabaseUrl, supabaseAnonKey, {
@@ -111,9 +118,32 @@ export const createAuthenticatedClient = (accessToken: string) => {
 
 // Helper function to get public URL for uploaded files
 export const getPublicUrl = (path: string): string => {
-  const { data } = supabase.storage.from("audio-clips").getPublicUrl(path);
-
-  return data.publicUrl;
+  const startTime = Date.now();
+  try {
+    const { data } = supabase.storage.from("audio-clips").getPublicUrl(path);
+    const duration = Date.now() - startTime;
+    
+    supabaseMonitor.logRequest({
+      type: 'storage',
+      operation: 'getPublicUrl',
+      duration,
+      status: 'success',
+      responseSize: JSON.stringify(data).length,
+    });
+    
+    return data.publicUrl;
+  } catch (error: any) {
+    const duration = Date.now() - startTime;
+    supabaseMonitor.logRequest({
+      type: 'storage',
+      operation: 'getPublicUrl',
+      duration,
+      status: 'failure',
+      error: error?.message || 'Unknown error',
+      errorCode: error?.code,
+    });
+    throw error;
+  }
 };
 
 // Helper function to upload file and get the path - NOW ACCEPTS AUTHENTICATED CLIENT
@@ -123,6 +153,7 @@ export const uploadAudioFile = async (
   filename: string,
   authenticatedClient?: ReturnType<typeof createAuthenticatedClient>
 ): Promise<string> => {
+  const startTime = Date.now();
   const filePath = `${userId}/${filename}`;
 
   // Use authenticated client if provided, otherwise fall back to base client
@@ -130,20 +161,51 @@ export const uploadAudioFile = async (
 
   console.log("📁 Uploading:", filename, "for user:", userId);
 
-  const { error } = await clientToUse.storage
-    .from("audio-clips")
-    .upload(filePath, file, {
-      cacheControl: "3600",
-      upsert: false,
+  try {
+    const { error } = await clientToUse.storage
+      .from("audio-clips")
+      .upload(filePath, file, {
+        cacheControl: "3600",
+        upsert: false,
+      });
+
+    const duration = Date.now() - startTime;
+
+    if (error) {
+      console.error("❌ Upload failed:", error);
+      supabaseMonitor.logRequest({
+        type: 'storage',
+        operation: 'upload',
+        duration,
+        status: 'failure',
+        error: error.message,
+        errorCode: (error as any)?.statusCode?.toString(),
+      });
+      throw new Error(`Upload failed: ${error.message}`);
+    }
+
+    supabaseMonitor.logRequest({
+      type: 'storage',
+      operation: 'upload',
+      duration,
+      status: 'success',
+      responseSize: file.size,
     });
 
-  if (error) {
-    console.error("❌ Upload failed:", error);
-    throw new Error(`Upload failed: ${error.message}`);
+    console.log("✅ File uploaded:", filePath);
+    return filePath;
+  } catch (error: any) {
+    const duration = Date.now() - startTime;
+    supabaseMonitor.logRequest({
+      type: 'storage',
+      operation: 'upload',
+      duration,
+      status: 'failure',
+      error: error?.message || 'Unknown error',
+      errorCode: error?.code,
+    });
+    throw error;
   }
-
-  console.log("✅ File uploaded:", filePath);
-  return filePath;
 };
 
 // Helper function to delete file from storage
@@ -151,14 +213,46 @@ export const deleteAudioFile = async (
   path: string,
   authenticatedClient?: ReturnType<typeof createAuthenticatedClient>
 ): Promise<void> => {
+  const startTime = Date.now();
   const clientToUse = authenticatedClient || supabase;
 
-  const { error } = await clientToUse.storage
-    .from("audio-clips")
-    .remove([path]);
+  try {
+    const { error } = await clientToUse.storage
+      .from("audio-clips")
+      .remove([path]);
 
-  if (error) {
-    console.warn(`Failed to delete file ${path}:`, error.message);
+    const duration = Date.now() - startTime;
+
+    if (error) {
+      console.warn(`Failed to delete file ${path}:`, error.message);
+      supabaseMonitor.logRequest({
+        type: 'storage',
+        operation: 'delete',
+        duration,
+        status: 'failure',
+        error: error.message,
+        errorCode: (error as any)?.statusCode?.toString(),
+      });
+      // Don't throw - file might already be deleted
+      return;
+    }
+
+    supabaseMonitor.logRequest({
+      type: 'storage',
+      operation: 'delete',
+      duration,
+      status: 'success',
+    });
+  } catch (error: any) {
+    const duration = Date.now() - startTime;
+    supabaseMonitor.logRequest({
+      type: 'storage',
+      operation: 'delete',
+      duration,
+      status: 'failure',
+      error: error?.message || 'Unknown error',
+      errorCode: error?.code,
+    });
     // Don't throw - file might already be deleted
   }
 };

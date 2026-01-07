@@ -10,6 +10,7 @@ import React, {
   useRef,
 } from "react";
 import { supabase } from "@/lib/supabase";
+import { supabaseMonitor } from "@/lib/supabase-monitor";
 import type {
   AuthContextType,
   AuthState,
@@ -102,11 +103,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       try {
         // Parallelize profile fetch and admin status check
+        const profileStart = Date.now();
         const profilePromise = supabase
           .from("profiles")
           .select("username, email")
           .eq("id", session.user.id)
-          .maybeSingle();
+          .maybeSingle()
+          .then(result => {
+            const profileDuration = Date.now() - profileStart;
+            supabaseMonitor.logRequest({
+              type: 'database',
+              operation: 'getProfile',
+              duration: profileDuration,
+              status: result.error ? 'failure' : 'success',
+              error: result.error?.message,
+              errorCode: result.error?.code,
+            });
+            return result;
+          });
 
         const adminPromise = options.skipAdminCheck
           ? Promise.resolve(false)
@@ -193,10 +207,57 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const initializeAuth = async () => {
       try {
         // Get initial session (Supabase uses localStorage, so this is fast)
-        const {
-          data: { session: initialSession },
-          error,
-        } = await supabase.auth.getSession();
+        const requestId = supabaseMonitor.startRequest('auth', 'getSession');
+        const timeoutMs = 15000; // 15 seconds for auth
+        
+        let initialSession, error;
+        try {
+          const result = await Promise.race([
+            supabase.auth.getSession(),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => {
+                supabaseMonitor.timeoutRequest(requestId, timeoutMs);
+                reject(new Error('Auth operation timeout'));
+              }, timeoutMs)
+            ),
+          ]);
+          
+          initialSession = result.data.session;
+          error = result.error;
+          
+          const inFlight = (supabaseMonitor as any).inFlightRequests.get(requestId);
+          const duration = inFlight ? Date.now() - inFlight.startTime : 0;
+          
+          supabaseMonitor.completeRequest(requestId, {
+            type: 'auth',
+            operation: 'getSession',
+            duration,
+            status: error ? 'failure' : 'success',
+            error: error?.message,
+            errorCode: error?.status?.toString(),
+          });
+        } catch (timeoutError: any) {
+          // Error already handled by timeout or completion above
+          if (timeoutError?.message === 'Auth operation timeout') {
+            // Already logged as timeout
+            throw timeoutError;
+          } else {
+            // Unexpected error - log it
+            const inFlight = (supabaseMonitor as any).inFlightRequests.get(requestId);
+            if (inFlight) {
+              const duration = Date.now() - inFlight.startTime;
+              supabaseMonitor.completeRequest(requestId, {
+                type: 'auth',
+                operation: 'getSession',
+                duration,
+                status: 'failure',
+                error: timeoutError?.message || 'Unknown error',
+                errorCode: timeoutError?.status?.toString(),
+              });
+            }
+            throw timeoutError;
+          }
+        }
 
         if (error) {
           throw error;
@@ -327,10 +388,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setAuthState((prev) => ({ ...prev, isLoading: true, error: null }));
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: credentials.email,
-        password: credentials.password,
-      });
+      const requestId = supabaseMonitor.startRequest('auth', 'signInWithPassword');
+      const timeoutMs = 15000; // 15 seconds
+      
+      let data, error;
+      try {
+        const result = await Promise.race([
+          supabase.auth.signInWithPassword({
+            email: credentials.email,
+            password: credentials.password,
+          }),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => {
+              supabaseMonitor.timeoutRequest(requestId, timeoutMs);
+              reject(new Error('Login timeout'));
+            }, timeoutMs)
+          ),
+        ]);
+        data = result.data;
+        error = result.error;
+      } catch (timeoutError: any) {
+        if (timeoutError?.message === 'Login timeout') {
+          throw timeoutError;
+        }
+        throw timeoutError;
+      }
+      
+      const inFlight = (supabaseMonitor as any).inFlightRequests.get(requestId);
+      const duration = inFlight ? Date.now() - inFlight.startTime : 0;
+      
+      if (inFlight) {
+        supabaseMonitor.completeRequest(requestId, {
+          type: 'auth',
+          operation: 'signInWithPassword',
+          duration,
+          status: error ? 'failure' : 'success',
+          error: error?.message,
+          errorCode: error?.status?.toString(),
+        });
+      }
 
       if (error) throw error;
       if (!data.session) throw new Error("No session returned from login");
@@ -394,13 +490,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Check if username/email exists logic (simplified for brevity, assume relying on DB constraints or pre-checks)
       // For a robust refactor, keeping the pre-checks is good UX.
+      const profileCheckStart = Date.now();
       const { data: existingProfile } = await supabase
         .from("profiles")
         .select("username")
         .eq("username", credentials.username)
         .maybeSingle();
+      const profileCheckDuration = Date.now() - profileCheckStart;
+      
+      supabaseMonitor.logRequest({
+        type: 'database',
+        operation: 'checkUsernameExists',
+        duration: profileCheckDuration,
+        status: 'success',
+      });
+      
       if (existingProfile) throw new Error("Username already taken");
 
+      const signUpStart = Date.now();
       const { data, error } = await supabase.auth.signUp({
         email: credentials.email,
         password: credentials.password,
@@ -410,6 +517,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             email: credentials.email,
           },
         },
+      });
+      const signUpDuration = Date.now() - signUpStart;
+      
+      supabaseMonitor.logRequest({
+        type: 'auth',
+        operation: 'signUp',
+        duration: signUpDuration,
+        status: error ? 'failure' : 'success',
+        error: error?.message,
+        errorCode: error?.status?.toString(),
       });
 
       if (error) throw error;

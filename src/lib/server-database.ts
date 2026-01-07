@@ -15,6 +15,7 @@ import {
   verifyAccessToken,
 } from "@/lib/supabase";
 import { isAdmin } from "@/lib/admin";
+import { supabaseMonitor } from "@/lib/supabase-monitor";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -24,6 +25,9 @@ if (!supabaseUrl || !supabaseAnonKey) {
     "Missing Supabase environment variables. Please check your .env.local file."
   );
 }
+
+// Track server client instance
+const serverClientId = supabaseMonitor.registerClient('server');
 
 // Create client for server-side operations (using anon key for now)
 const supabaseServer = createClient<Database>(supabaseUrl, supabaseAnonKey, {
@@ -37,9 +41,59 @@ class SupabaseDatabase {
   // Helper to get authenticated client with access token
   private getAuthenticatedClient(accessToken?: string) {
     if (accessToken) {
-      return createAuthenticatedClient(accessToken);
+      const client = createAuthenticatedClient(accessToken);
+      supabaseMonitor.updateClientUsage(serverClientId);
+      return client;
     }
+    supabaseMonitor.updateClientUsage(serverClientId);
     return supabaseServer;
+  }
+
+  // Helper to wrap database operations with monitoring
+  private async monitorDbOperation<T>(
+    operation: string,
+    fn: () => Promise<T>
+  ): Promise<T> {
+    const requestId = supabaseMonitor.startRequest('database', operation);
+    const timeoutMs = 30000; // 30 seconds
+    
+    try {
+      const result = await Promise.race([
+        fn(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => {
+            supabaseMonitor.timeoutRequest(requestId, timeoutMs);
+            reject(new Error('Operation timeout'));
+          }, timeoutMs)
+        ),
+      ]);
+      const duration = Date.now() - (supabaseMonitor as any).inFlightRequests.get(requestId)?.startTime || 0;
+      supabaseMonitor.completeRequest(requestId, {
+        type: 'database',
+        operation,
+        duration,
+        status: 'success',
+        responseSize: JSON.stringify(result).length,
+      });
+      return result;
+    } catch (error: any) {
+      const inFlight = (supabaseMonitor as any).inFlightRequests.get(requestId);
+      const duration = inFlight ? Date.now() - inFlight.startTime : 0;
+      const isTimeout = error?.message === 'Operation timeout';
+      
+      if (!isTimeout) {
+        // Only complete if not already timed out
+        supabaseMonitor.completeRequest(requestId, {
+          type: 'database',
+          operation,
+          duration,
+          status: 'failure',
+          error: error?.message || 'Unknown error',
+          errorCode: error?.code || error?.statusCode?.toString(),
+        });
+      }
+      throw error;
+    }
   }
 
   // Helper to check if a string is an email
@@ -49,57 +103,63 @@ class SupabaseDatabase {
 
   // Helper to lookup user email by username
   async getUserEmailByUsername(username: string): Promise<string | null> {
-    const { data: profile, error } = await supabaseServer
-      .from("profiles")
-      .select("email")
-      .eq("username", username)
-      .single();
+    return this.monitorDbOperation('getUserEmailByUsername', async () => {
+      const { data: profile, error } = await supabaseServer
+        .from("profiles")
+        .select("email")
+        .eq("username", username)
+        .single();
 
-    if (error || !profile) {
-      return null;
-    }
+      if (error || !profile) {
+        return null;
+      }
 
-    return profile.email;
+      return profile.email;
+    });
   }
 
   // Helper to get user profile by email
   async getUserByEmail(email: string): Promise<User | null> {
-    const { data: profile, error } = await supabaseServer
-      .from("profiles")
-      .select("*")
-      .eq("email", email)
-      .single();
+    return this.monitorDbOperation('getUserByEmail', async () => {
+      const { data: profile, error } = await supabaseServer
+        .from("profiles")
+        .select("*")
+        .eq("email", email)
+        .single();
 
-    if (error || !profile) {
-      return null;
-    }
+      if (error || !profile) {
+        return null;
+      }
 
-    return {
-      id: profile.id,
-      username: profile.username,
-      email: profile.email,
-      createdAt: profile.created_at,
-    };
+      return {
+        id: profile.id,
+        username: profile.username,
+        email: profile.email,
+        createdAt: profile.created_at,
+      };
+    });
   }
 
   // Helper to get user profile by username
   async getUserByUsername(username: string): Promise<User | null> {
-    const { data: profile, error } = await supabaseServer
-      .from("profiles")
-      .select("*")
-      .eq("username", username)
-      .single();
+    return this.monitorDbOperation('getUserByUsername', async () => {
+      const { data: profile, error } = await supabaseServer
+        .from("profiles")
+        .select("*")
+        .eq("username", username)
+        .single();
 
-    if (error || !profile) {
-      return null;
-    }
+      if (error || !profile) {
+        return null;
+      }
 
-    return {
-      id: profile.id,
-      username: profile.username,
-      email: profile.email,
-      createdAt: profile.created_at,
-    };
+      return {
+        id: profile.id,
+        username: profile.username,
+        email: profile.email,
+        createdAt: profile.created_at,
+      };
+    });
   }
 
   // User methods
@@ -200,22 +260,24 @@ class SupabaseDatabase {
   }
 
   async getUserById(id: string): Promise<User | null> {
-    const { data: profile, error } = await supabaseServer
-      .from("profiles")
-      .select("*")
-      .eq("id", id)
-      .single();
+    return this.monitorDbOperation('getUserById', async () => {
+      const { data: profile, error } = await supabaseServer
+        .from("profiles")
+        .select("*")
+        .eq("id", id)
+        .single();
 
-    if (error || !profile) {
-      return null;
-    }
+      if (error || !profile) {
+        return null;
+      }
 
-    return {
-      id: profile.id,
-      username: profile.username,
-      email: profile.email,
-      createdAt: profile.created_at,
-    };
+      return {
+        id: profile.id,
+        username: profile.username,
+        email: profile.email,
+        createdAt: profile.created_at,
+      };
+    });
   }
 
   // Audio clip methods - NOW ACCEPT ACCESS TOKEN
@@ -223,62 +285,64 @@ class SupabaseDatabase {
     clip: Omit<SupabaseAudioClip, "id" | "createdAt" | "updatedAt">,
     accessToken?: string
   ): Promise<AudioClip> {
-    const client = this.getAuthenticatedClient(accessToken);
-    const dbClip = convertAudioClipToDb(clip);
+    return this.monitorDbOperation('createAudioClip', async () => {
+      const client = this.getAuthenticatedClient(accessToken);
+      const dbClip = convertAudioClipToDb(clip);
 
-    console.log("💾 Creating clip:", clip.title);
-    console.log("💾 Uploaded by user ID:", clip.uploadedBy);
-    console.log("💾 Has access token:", !!accessToken);
+      console.log("💾 Creating clip:", clip.title);
+      console.log("💾 Uploaded by user ID:", clip.uploadedBy);
+      console.log("💾 Has access token:", !!accessToken);
 
-    // Verify the user exists before inserting (helps debug RLS issues)
-    if (accessToken) {
-      // Verify token using standard client (no custom storage)
-      const { user, error: userError } = await verifyAccessToken(accessToken);
-      if (userError || !user) {
-        console.error("❌ Cannot verify user with token:", userError?.message);
-        throw new Error(
-          `Authentication failed: ${userError?.message || "User not found"}`
-        );
+      // Verify the user exists before inserting (helps debug RLS issues)
+      if (accessToken) {
+        // Verify token using standard client (no custom storage)
+        const { user, error: userError } = await verifyAccessToken(accessToken);
+        if (userError || !user) {
+          console.error("❌ Cannot verify user with token:", userError?.message);
+          throw new Error(
+            `Authentication failed: ${userError?.message || "User not found"}`
+          );
+        }
+        if (user.id !== clip.uploadedBy) {
+          console.error("❌ User ID mismatch:", user.id, "vs", clip.uploadedBy);
+          throw new Error(
+            "User ID mismatch - cannot create clip for different user"
+          );
+        }
+        console.log("✅ Verified user ID matches:", user.id);
       }
-      if (user.id !== clip.uploadedBy) {
-        console.error("❌ User ID mismatch:", user.id, "vs", clip.uploadedBy);
-        throw new Error(
-          "User ID mismatch - cannot create clip for different user"
-        );
+
+      const { data, error } = await client
+        .from("audio_clips")
+        .insert(dbClip)
+        .select()
+        .single();
+
+      if (error) {
+        console.error("❌ Database insert failed:", error);
+        console.error("❌ Error code:", error.code);
+        console.error("❌ Error details:", error.details);
+        console.error("❌ Error hint:", error.hint);
+        throw new Error(`Failed to create audio clip: ${error.message}`);
       }
-      console.log("✅ Verified user ID matches:", user.id);
-    }
 
-    const { data, error } = await client
-      .from("audio_clips")
-      .insert(dbClip)
-      .select()
-      .single();
+      console.log("✅ Clip created:", data.id);
+      const convertedClip = convertAudioClipFromDb(data);
 
-    if (error) {
-      console.error("❌ Database insert failed:", error);
-      console.error("❌ Error code:", error.code);
-      console.error("❌ Error details:", error.details);
-      console.error("❌ Error hint:", error.hint);
-      throw new Error(`Failed to create audio clip: ${error.message}`);
-    }
-
-    console.log("✅ Clip created:", data.id);
-    const convertedClip = convertAudioClipFromDb(data);
-
-    // Convert to legacy AudioClip format for compatibility
-    return {
-      id: convertedClip.id,
-      title: convertedClip.title,
-      duration: convertedClip.duration,
-      filename: convertedClip.filename,
-      originalFilename: convertedClip.originalFilename,
-      fileSize: convertedClip.fileSize,
-      metadata: convertedClip.metadata,
-      uploadedBy: convertedClip.uploadedBy,
-      createdAt: convertedClip.createdAt,
-      updatedAt: convertedClip.updatedAt,
-    };
+      // Convert to legacy AudioClip format for compatibility
+      return {
+        id: convertedClip.id,
+        title: convertedClip.title,
+        duration: convertedClip.duration,
+        filename: convertedClip.filename,
+        originalFilename: convertedClip.originalFilename,
+        fileSize: convertedClip.fileSize,
+        metadata: convertedClip.metadata,
+        uploadedBy: convertedClip.uploadedBy,
+        createdAt: convertedClip.createdAt,
+        updatedAt: convertedClip.updatedAt,
+      };
+    });
   }
 
   async getAudioClips(
@@ -287,8 +351,9 @@ class SupabaseDatabase {
     limit?: number,
     accessToken?: string
   ): Promise<AudioClip[]> {
-    const client = this.getAuthenticatedClient(accessToken);
-    let query = client.from("audio_clips").select("*");
+    return this.monitorDbOperation('getAudioClips', async () => {
+      const client = this.getAuthenticatedClient(accessToken);
+      let query = client.from("audio_clips").select("*");
 
     // Apply filters
     if (filters) {
@@ -326,15 +391,49 @@ class SupabaseDatabase {
       query = query.limit(limit);
     }
 
-    const { data, error } = await query;
+      const { data, error } = await query;
 
-    if (error) {
-      throw new Error(`Failed to fetch audio clips: ${error.message}`);
-    }
+      if (error) {
+        throw new Error(`Failed to fetch audio clips: ${error.message}`);
+      }
 
-    // Convert to legacy AudioClip format
-    return data.map((row) => {
-      const converted = convertAudioClipFromDb(row);
+      // Convert to legacy AudioClip format
+      return data.map((row) => {
+        const converted = convertAudioClipFromDb(row);
+        return {
+          id: converted.id,
+          title: converted.title,
+          duration: converted.duration,
+          filename: converted.filename,
+          originalFilename: converted.originalFilename,
+          fileSize: converted.fileSize,
+          metadata: converted.metadata,
+          uploadedBy: converted.uploadedBy,
+          createdAt: converted.createdAt,
+          updatedAt: converted.updatedAt,
+        };
+      });
+    });
+  }
+
+  async getAudioClipById(
+    id: string,
+    accessToken?: string
+  ): Promise<AudioClip | null> {
+    return this.monitorDbOperation('getAudioClipById', async () => {
+      const client = this.getAuthenticatedClient(accessToken);
+
+      const { data, error } = await client
+        .from("audio_clips")
+        .select("*")
+        .eq("id", id)
+        .single();
+
+      if (error || !data) {
+        return null;
+      }
+
+      const converted = convertAudioClipFromDb(data);
       return {
         id: converted.id,
         title: converted.title,
@@ -348,37 +447,6 @@ class SupabaseDatabase {
         updatedAt: converted.updatedAt,
       };
     });
-  }
-
-  async getAudioClipById(
-    id: string,
-    accessToken?: string
-  ): Promise<AudioClip | null> {
-    const client = this.getAuthenticatedClient(accessToken);
-
-    const { data, error } = await client
-      .from("audio_clips")
-      .select("*")
-      .eq("id", id)
-      .single();
-
-    if (error || !data) {
-      return null;
-    }
-
-    const converted = convertAudioClipFromDb(data);
-    return {
-      id: converted.id,
-      title: converted.title,
-      duration: converted.duration,
-      filename: converted.filename,
-      originalFilename: converted.originalFilename,
-      fileSize: converted.fileSize,
-      metadata: converted.metadata,
-      uploadedBy: converted.uploadedBy,
-      createdAt: converted.createdAt,
-      updatedAt: converted.updatedAt,
-    };
   }
 
   async deleteAudioClip(
