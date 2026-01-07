@@ -686,18 +686,32 @@ class SupabaseDatabase {
   }
 
   async getClipStars(clipId: string, accessToken?: string): Promise<string[]> {
-    const client = this.getAuthenticatedClient(accessToken);
+    try {
+      const client = this.getAuthenticatedClient(accessToken);
 
-    const { data, error } = await client
-      .from("clip_stars")
-      .select("user_id")
-      .eq("clip_id", clipId);
+      const { data, error } = await client
+        .from("clip_stars")
+        .select("user_id")
+        .eq("clip_id", clipId);
 
-    if (error) {
-      throw new Error(`Failed to get clip stars: ${error.message}`);
+      if (error) {
+        // If it's a connection/timeout error, return empty array instead of throwing
+        if (error.message?.includes("fetch failed") || error.message?.includes("timeout") || error.message?.includes("ECONNREFUSED")) {
+          console.warn(`Connection error getting stars for clip ${clipId}:`, error.message);
+          return [];
+        }
+        throw new Error(`Failed to get clip stars: ${error.message}`);
+      }
+
+      return data.map((star) => star.user_id);
+    } catch (error: any) {
+      // Handle connection errors gracefully
+      if (error?.message?.includes("fetch failed") || error?.message?.includes("timeout") || error?.message?.includes("ECONNREFUSED") || error?.code === "UND_ERR_CONNECT_TIMEOUT") {
+        console.warn(`Connection error getting stars for clip ${clipId}:`, error.message);
+        return [];
+      }
+      throw error;
     }
-
-    return data.map((star) => star.user_id);
   }
 
   async getUserStarredClips(
@@ -716,6 +730,269 @@ class SupabaseDatabase {
     }
 
     return data.map((star) => star.clip_id);
+  }
+
+  // Difficulty rating methods
+  async rateClipDifficulty(
+    clipId: string,
+    userId: string,
+    rating: number,
+    accessToken?: string
+  ): Promise<boolean> {
+    return this.monitorDbOperation('rateClipDifficulty', async () => {
+      const client = this.getAuthenticatedClient(accessToken);
+
+      // Validate rating
+      if (rating < 1 || rating > 5 || !Number.isInteger(rating)) {
+        throw new Error("Rating must be an integer between 1 and 5");
+      }
+
+      // Use upsert to update if exists, insert if not
+      const { error } = await client
+        .from("clip_difficulty_ratings")
+        .upsert(
+          {
+            clip_id: clipId,
+            user_id: userId,
+            rating: rating,
+          },
+          {
+            onConflict: "clip_id,user_id",
+          }
+        );
+
+      if (error) {
+        throw new Error(`Failed to rate clip difficulty: ${error.message}`);
+      }
+
+      return true;
+    });
+  }
+
+  async removeDifficultyRating(
+    clipId: string,
+    userId: string,
+    accessToken?: string
+  ): Promise<boolean> {
+    return this.monitorDbOperation('removeDifficultyRating', async () => {
+      const client = this.getAuthenticatedClient(accessToken);
+
+      const { error } = await client
+        .from("clip_difficulty_ratings")
+        .delete()
+        .eq("clip_id", clipId)
+        .eq("user_id", userId);
+
+      if (error) {
+        throw new Error(`Failed to remove difficulty rating: ${error.message}`);
+      }
+
+      return true;
+    });
+  }
+
+  async getClipDifficultyRating(
+    clipId: string,
+    accessToken?: string
+  ): Promise<{ average: number | null; count: number; userRating: number | null }> {
+    return this.monitorDbOperation('getClipDifficultyRating', async () => {
+      try {
+        const client = this.getAuthenticatedClient(accessToken);
+
+        const { data, error } = await client
+          .from("clip_difficulty_ratings")
+          .select("rating, user_id")
+          .eq("clip_id", clipId);
+
+        // If table doesn't exist (migration not run), return defaults
+        if (error) {
+          if (error.message?.includes("does not exist") || error.code === "42P01") {
+            console.warn("clip_difficulty_ratings table does not exist. Migration may not have been run.");
+            return { average: null, count: 0, userRating: null };
+          }
+          throw new Error(`Failed to get clip difficulty rating: ${error.message}`);
+        }
+
+        if (!data || data.length === 0) {
+          return { average: null, count: 0, userRating: null };
+        }
+
+        // Get user ID if authenticated
+        let userId: string | null = null;
+        if (accessToken) {
+          const { user } = await verifyAccessToken(accessToken);
+          userId = user?.id || null;
+        }
+
+        const ratings = data.map((r) => r.rating);
+        const average = ratings.reduce((sum, r) => sum + r, 0) / ratings.length;
+        const userRating = userId
+          ? data.find((r) => r.user_id === userId)?.rating || null
+          : null;
+
+        return {
+          average: Math.round(average * 10) / 10, // Round to 1 decimal
+          count: ratings.length,
+          userRating: userRating || null,
+        };
+      } catch (error: any) {
+        // Fallback for any unexpected errors (table doesn't exist, connection issues, etc.)
+        if (error?.message?.includes("does not exist") || error?.code === "42P01") {
+          console.warn("clip_difficulty_ratings table does not exist. Migration may not have been run.");
+          return { average: null, count: 0, userRating: null };
+        }
+        // Handle connection errors gracefully
+        if (error?.message?.includes("fetch failed") || error?.message?.includes("timeout") || error?.message?.includes("ECONNREFUSED") || error?.code === "UND_ERR_CONNECT_TIMEOUT") {
+          console.warn("Connection error getting difficulty rating:", error.message);
+          return { average: null, count: 0, userRating: null };
+        }
+        throw error;
+      }
+    });
+  }
+
+  // Vote methods
+  async voteClip(
+    clipId: string,
+    userId: string,
+    voteType: "up" | "down",
+    accessToken?: string
+  ): Promise<boolean> {
+    return this.monitorDbOperation('voteClip', async () => {
+      const client = this.getAuthenticatedClient(accessToken);
+
+      // Use upsert to update if exists, insert if not
+      const { error } = await client
+        .from("clip_votes")
+        .upsert(
+          {
+            clip_id: clipId,
+            user_id: userId,
+            vote_type: voteType,
+          },
+          {
+            onConflict: "clip_id,user_id",
+          }
+        );
+
+      if (error) {
+        throw new Error(`Failed to vote clip: ${error.message}`);
+      }
+
+      return true;
+    });
+  }
+
+  async removeClipVote(
+    clipId: string,
+    userId: string,
+    accessToken?: string
+  ): Promise<boolean> {
+    return this.monitorDbOperation('removeClipVote', async () => {
+      const client = this.getAuthenticatedClient(accessToken);
+
+      const { error } = await client
+        .from("clip_votes")
+        .delete()
+        .eq("clip_id", clipId)
+        .eq("user_id", userId);
+
+      if (error) {
+        throw new Error(`Failed to remove clip vote: ${error.message}`);
+      }
+
+      return true;
+    });
+  }
+
+  async getClipVotes(
+    clipId: string,
+    accessToken?: string
+  ): Promise<{ upvoteCount: number; downvoteCount: number; voteScore: number; userVote: "up" | "down" | null }> {
+    return this.monitorDbOperation('getClipVotes', async () => {
+      try {
+        const client = this.getAuthenticatedClient(accessToken);
+
+        const { data, error } = await client
+          .from("clip_votes")
+          .select("vote_type, user_id")
+          .eq("clip_id", clipId);
+
+        // If table doesn't exist (migration not run), return defaults
+        if (error) {
+          if (error.message?.includes("does not exist") || error.code === "42P01") {
+            console.warn("clip_votes table does not exist. Migration may not have been run.");
+            return { upvoteCount: 0, downvoteCount: 0, voteScore: 0, userVote: null };
+          }
+          throw new Error(`Failed to get clip votes: ${error.message}`);
+        }
+
+        // Get user ID if authenticated
+        let userId: string | null = null;
+        if (accessToken) {
+          const { user } = await verifyAccessToken(accessToken);
+          userId = user?.id || null;
+        }
+
+        const upvoteCount = data.filter((v) => v.vote_type === "up").length;
+        const downvoteCount = data.filter((v) => v.vote_type === "down").length;
+        const voteScore = upvoteCount - downvoteCount;
+        const userVote = userId
+          ? (data.find((v) => v.user_id === userId)?.vote_type as "up" | "down" | null) || null
+          : null;
+
+        return {
+          upvoteCount,
+          downvoteCount,
+          voteScore,
+          userVote,
+        };
+      } catch (error: any) {
+        // Fallback for any unexpected errors (table doesn't exist, connection issues, etc.)
+        if (error?.message?.includes("does not exist") || error?.code === "42P01") {
+          console.warn("clip_votes table does not exist. Migration may not have been run.");
+          return { upvoteCount: 0, downvoteCount: 0, voteScore: 0, userVote: null };
+        }
+        // Handle connection errors gracefully
+        if (error?.message?.includes("fetch failed") || error?.message?.includes("timeout") || error?.message?.includes("ECONNREFUSED") || error?.code === "UND_ERR_CONNECT_TIMEOUT") {
+          console.warn("Connection error getting votes:", error.message);
+          return { upvoteCount: 0, downvoteCount: 0, voteScore: 0, userVote: null };
+        }
+        throw error;
+      }
+    });
+  }
+
+  // Helper: Calculate characters per second (alphanumeric only)
+  calculateCharactersPerSecond(clip: AudioClip): number | null {
+    if (!clip.metadata.transcript || !clip.duration || clip.duration <= 0) {
+      return null;
+    }
+
+    // Count only alphanumeric characters (exclude spaces, punctuation)
+    const alphanumericChars = clip.metadata.transcript.replace(/[^a-zA-Z0-9]/g, "").length;
+    return alphanumericChars / clip.duration;
+  }
+
+  // Helper: Calculate speed percentiles
+  getSpeedPercentiles(clips: AudioClip[]): { slow: number; medium: number; fast: number } {
+    const speeds = clips
+      .map((clip) => this.calculateCharactersPerSecond(clip))
+      .filter((speed): speed is number => speed !== null)
+      .sort((a, b) => a - b);
+
+    if (speeds.length === 0) {
+      return { slow: 0, medium: 0, fast: 0 };
+    }
+
+    const slowThreshold = speeds[Math.floor(speeds.length * 0.33)];
+    const fastThreshold = speeds[Math.floor(speeds.length * 0.66)];
+
+    return {
+      slow: slowThreshold,
+      medium: fastThreshold,
+      fast: speeds[speeds.length - 1],
+    };
   }
 
   // User filter preferences methods
@@ -777,6 +1054,26 @@ class SupabaseDatabase {
       ) {
         result.speakerDialect = preferences.speakerDialect;
       }
+      if (
+        preferences.speedFilter &&
+        ["slow", "medium", "fast"].includes(preferences.speedFilter)
+      ) {
+        result.speedFilter = preferences.speedFilter;
+      }
+      if (preferences.defaultSort && typeof preferences.defaultSort === "object") {
+        const sort = preferences.defaultSort;
+        if (
+          sort.field &&
+          typeof sort.field === "string" &&
+          sort.direction &&
+          ["asc", "desc"].includes(sort.direction)
+        ) {
+          result.defaultSort = {
+            field: sort.field as any,
+            direction: sort.direction,
+          };
+        }
+      }
 
       // Return null if no valid preferences found
       return Object.keys(result).length > 0 ? result : null;
@@ -819,6 +1116,12 @@ class SupabaseDatabase {
     }
     if (preferences.speakerDialect) {
       preferencesToSave.speakerDialect = preferences.speakerDialect;
+    }
+    if (preferences.speedFilter) {
+      preferencesToSave.speedFilter = preferences.speedFilter;
+    }
+    if (preferences.defaultSort) {
+      preferencesToSave.defaultSort = preferences.defaultSort;
     }
 
     // If all preferences are empty, save null to clear them

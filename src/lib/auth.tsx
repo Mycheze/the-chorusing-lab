@@ -206,46 +206,56 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const initializeAuth = async () => {
       try {
-        // Get initial session (Supabase uses localStorage, so this is fast)
-        const requestId = supabaseMonitor.startRequest('auth', 'getSession');
-        const timeoutMs = 15000; // 15 seconds for auth
-        
-        let initialSession, error;
-        try {
-          const result = await Promise.race([
-            supabase.auth.getSession(),
-            new Promise<never>((_, reject) =>
-              setTimeout(() => {
-                supabaseMonitor.timeoutRequest(requestId, timeoutMs);
-                reject(new Error('Auth operation timeout'));
-              }, timeoutMs)
-            ),
-          ]);
+        // Helper function to get session with timeout and retry logic
+        const getSessionWithRetry = async (retryCount = 0): Promise<{ session: Session | null; error: any }> => {
+          const requestId = supabaseMonitor.startRequest('auth', 'getSession');
+          const timeoutMs = retryCount === 0 ? 15000 : 5000; // 15s first attempt, 5s retry
           
-          initialSession = result.data.session;
-          error = result.error;
-          
-          const inFlight = (supabaseMonitor as any).inFlightRequests.get(requestId);
-          const duration = inFlight ? Date.now() - inFlight.startTime : 0;
-          
-          supabaseMonitor.completeRequest(requestId, {
-            type: 'auth',
-            operation: 'getSession',
-            duration,
-            status: error ? 'failure' : 'success',
-            error: error?.message,
-            errorCode: error?.status?.toString(),
-          });
-        } catch (timeoutError: any) {
-          // Error already handled by timeout or completion above
-          if (timeoutError?.message === 'Auth operation timeout') {
-            // Already logged as timeout
-            throw timeoutError;
-          } else {
-            // Unexpected error - log it
+          try {
+            const result = await Promise.race([
+              supabase.auth.getSession(),
+              new Promise<never>((_, reject) =>
+                setTimeout(() => {
+                  supabaseMonitor.timeoutRequest(requestId, timeoutMs);
+                  reject(new Error('Auth operation timeout'));
+                }, timeoutMs)
+              ),
+            ]);
+            
             const inFlight = (supabaseMonitor as any).inFlightRequests.get(requestId);
-            if (inFlight) {
-              const duration = Date.now() - inFlight.startTime;
+            const duration = inFlight ? Date.now() - inFlight.startTime : 0;
+            
+            supabaseMonitor.completeRequest(requestId, {
+              type: 'auth',
+              operation: 'getSession',
+              duration,
+              status: result.error ? 'failure' : 'success',
+              error: result.error?.message,
+              errorCode: result.error?.status?.toString(),
+            });
+            
+            return { session: result.data.session, error: result.error };
+          } catch (timeoutError: any) {
+            const inFlight = (supabaseMonitor as any).inFlightRequests.get(requestId);
+            const duration = inFlight ? Date.now() - inFlight.startTime : 0;
+            
+            if (timeoutError?.message === 'Auth operation timeout') {
+              // If first attempt timed out, retry once
+              if (retryCount === 0) {
+                console.warn('Auth getSession() timed out, retrying...');
+                return getSessionWithRetry(1);
+              }
+              // Both attempts failed
+              supabaseMonitor.completeRequest(requestId, {
+                type: 'auth',
+                operation: 'getSession',
+                duration,
+                status: 'failure',
+                error: 'Auth operation timeout (after retry)',
+              });
+              return { session: null, error: timeoutError };
+            } else {
+              // Unexpected error - log it
               supabaseMonitor.completeRequest(requestId, {
                 type: 'auth',
                 operation: 'getSession',
@@ -254,10 +264,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 error: timeoutError?.message || 'Unknown error',
                 errorCode: timeoutError?.status?.toString(),
               });
+              return { session: null, error: timeoutError };
             }
-            throw timeoutError;
           }
-        }
+        };
+        
+        // Get initial session with retry logic
+        const { session: initialSession, error } = await getSessionWithRetry();
 
         if (error) {
           throw error;

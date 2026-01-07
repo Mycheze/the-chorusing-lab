@@ -96,10 +96,11 @@ export interface AudioFilters {
   speakerDialect?: string;
   tags?: string[];
   uploadedBy?: string;
+  speedFilter?: 'slow' | 'medium' | 'fast';
 }
 
 export interface AudioSort {
-  field: 'title' | 'duration' | 'language' | 'createdAt';
+  field: 'title' | 'duration' | 'language' | 'createdAt' | 'voteScore' | 'difficulty' | 'charactersPerSecond';
   direction: 'asc' | 'desc';
 }
 
@@ -109,6 +110,8 @@ export interface FilterPreferences {
   speakerGender?: 'male' | 'female' | 'other';
   speakerAgeRange?: 'teen' | 'younger-adult' | 'adult' | 'senior';
   speakerDialect?: string;
+  speedFilter?: 'slow' | 'medium' | 'fast';
+  defaultSort?: AudioSort;
 }
 
 // Event types for audio player

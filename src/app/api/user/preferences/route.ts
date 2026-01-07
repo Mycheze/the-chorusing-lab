@@ -136,6 +136,52 @@ export async function PUT(request: NextRequest) {
           { status: 400 }
         );
       }
+
+      if (
+        preferences.speedFilter !== undefined &&
+        !["slow", "medium", "fast"].includes(preferences.speedFilter)
+      ) {
+        return NextResponse.json(
+          { error: "Invalid speedFilter value" },
+          { status: 400 }
+        );
+      }
+
+      if (preferences.defaultSort !== undefined) {
+        if (typeof preferences.defaultSort !== "object" || preferences.defaultSort === null) {
+          return NextResponse.json(
+            { error: "Invalid defaultSort format" },
+            { status: 400 }
+          );
+        }
+        const validSortFields = [
+          "title",
+          "duration",
+          "language",
+          "createdAt",
+          "voteScore",
+          "difficulty",
+          "charactersPerSecond",
+        ];
+        if (
+          !preferences.defaultSort.field ||
+          !validSortFields.includes(preferences.defaultSort.field)
+        ) {
+          return NextResponse.json(
+            { error: "Invalid defaultSort.field value" },
+            { status: 400 }
+          );
+        }
+        if (
+          !preferences.defaultSort.direction ||
+          !["asc", "desc"].includes(preferences.defaultSort.direction)
+        ) {
+          return NextResponse.json(
+            { error: "Invalid defaultSort.direction value" },
+            { status: 400 }
+          );
+        }
+      }
     }
 
     await serverDb.saveUserFilterPreferences(

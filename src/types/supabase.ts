@@ -114,6 +114,52 @@ export interface Database {
           created_at?: string
         }
       }
+      clip_difficulty_ratings: {
+        Row: {
+          id: string
+          clip_id: string
+          user_id: string
+          rating: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          clip_id: string
+          user_id: string
+          rating: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          clip_id?: string
+          user_id?: string
+          rating?: number
+          created_at?: string
+        }
+      }
+      clip_votes: {
+        Row: {
+          id: string
+          clip_id: string
+          user_id: string
+          vote_type: 'up' | 'down'
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          clip_id: string
+          user_id: string
+          vote_type: 'up' | 'down'
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          clip_id?: string
+          user_id?: string
+          vote_type?: 'up' | 'down'
+          created_at?: string
+        }
+      }
     }
     Views: {
       [_ in never]: never
@@ -134,6 +180,8 @@ export interface Database {
 export type Profile = Database['public']['Tables']['profiles']['Row']
 export type AudioClipRow = Database['public']['Tables']['audio_clips']['Row']
 export type ClipStar = Database['public']['Tables']['clip_stars']['Row']
+export type ClipDifficultyRating = Database['public']['Tables']['clip_difficulty_ratings']['Row']
+export type ClipVote = Database['public']['Tables']['clip_votes']['Row']
 
 // Converted types that match our existing AudioClip interface
 export interface SupabaseAudioClip {

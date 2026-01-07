@@ -7,6 +7,8 @@ import Link from "next/link";
 import { ChorusingPlayer } from "@/components/chorus/ChorusingPlayer";
 import { TranscriptionPractice } from "@/components/chorus/TranscriptionPractice";
 import { RelatedClips } from "@/components/chorus/RelatedClips";
+import { DifficultyRating } from "@/components/chorus/DifficultyRating";
+import { ClipVoting } from "@/components/chorus/ClipVoting";
 import { useAuth } from "@/lib/auth";
 import type { AudioClip } from "@/types/audio";
 
@@ -14,6 +16,15 @@ interface ClipWithUrl extends AudioClip {
   url: string;
   starCount: number;
   isStarredByUser: boolean;
+  difficultyRating?: number | null;
+  difficultyRatingCount?: number;
+  userDifficultyRating?: number | null;
+  upvoteCount?: number;
+  downvoteCount?: number;
+  voteScore?: number;
+  userVote?: "up" | "down" | null;
+  charactersPerSecond?: number;
+  speedCategory?: "slow" | "medium" | "fast";
 }
 
 export default function ChorusPage() {
@@ -198,8 +209,8 @@ export default function ChorusPage() {
             <div className="lg:col-span-3 space-y-6">
               {/* Clip Info Card */}
               <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
+                <div className="flex items-start justify-between gap-6 mb-4">
+                  <div className="flex-1">
                     <h2 className="text-xl font-bold text-gray-900">
                       {clip.title}
                     </h2>
@@ -214,30 +225,91 @@ export default function ChorusPage() {
                       {clip.metadata.speakerDialect && (
                         <span>{clip.metadata.speakerDialect}</span>
                       )}
+                      {clip.charactersPerSecond && (
+                        <span className="text-xs">
+                          {clip.charactersPerSecond.toFixed(1)} chars/s
+                          {clip.speedCategory && (
+                            <span className="ml-1 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">
+                              {clip.speedCategory}
+                            </span>
+                          )}
+                        </span>
+                      )}
+                    </div>
+                    {clip.starCount > 0 && (
+                      <div className="flex items-center gap-1 text-yellow-600 mt-2">
+                        <span className="text-sm font-medium">
+                          {clip.starCount}
+                        </span>
+                        <span className="text-xs">stars</span>
+                      </div>
+                    )}
+                    {clip.metadata.tags.length > 0 && (
+                      <div className="flex gap-2 flex-wrap mt-3">
+                        {clip.metadata.tags.map((tag, index) => (
+                          <span
+                            key={index}
+                            className="px-2 py-1 bg-indigo-100 text-indigo-700 text-xs rounded-full"
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Discovery Features - Right side */}
+                  <div className="flex flex-col gap-4 min-w-[280px]">
+                    <div>
+                      <div className="text-sm font-medium text-gray-700 mb-2">
+                        Difficulty Rating
+                      </div>
+                      <DifficultyRating
+                        clipId={clip.id}
+                        averageRating={clip.difficultyRating ?? null}
+                        ratingCount={clip.difficultyRatingCount ?? 0}
+                        userRating={clip.userDifficultyRating ?? null}
+                        onRatingUpdate={(rating, average, count) => {
+                          setClip((prev) =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  difficultyRating: average,
+                                  difficultyRatingCount: count,
+                                  userDifficultyRating: rating,
+                                }
+                              : null
+                          );
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium text-gray-700 mb-2">
+                        Helpful?
+                      </div>
+                      <ClipVoting
+                        clipId={clip.id}
+                        upvoteCount={clip.upvoteCount ?? 0}
+                        downvoteCount={clip.downvoteCount ?? 0}
+                        voteScore={clip.voteScore ?? 0}
+                        userVote={clip.userVote ?? null}
+                        onVoteUpdate={(upvotes, downvotes, score, userVote) => {
+                          setClip((prev) =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  upvoteCount: upvotes,
+                                  downvoteCount: downvotes,
+                                  voteScore: score,
+                                  userVote,
+                                }
+                              : null
+                          );
+                        }}
+                      />
                     </div>
                   </div>
-                  {clip.starCount > 0 && (
-                    <div className="flex items-center gap-1 text-yellow-600">
-                      <span className="text-sm font-medium">
-                        {clip.starCount}
-                      </span>
-                      <span className="text-xs">stars</span>
-                    </div>
-                  )}
                 </div>
-
-                {clip.metadata.tags.length > 0 && (
-                  <div className="flex gap-2 flex-wrap">
-                    {clip.metadata.tags.map((tag, index) => (
-                      <span
-                        key={index}
-                        className="px-2 py-1 bg-indigo-100 text-indigo-700 text-xs rounded-full"
-                      >
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                )}
               </div>
 
               {/* Chorusing Player - Use the stable playerClip */}

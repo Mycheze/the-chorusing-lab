@@ -6,8 +6,9 @@ import {
   Search,
   Filter,
   ArrowUpDown,
-  Play,
+  ChevronUp,
   ChevronDown,
+  Play,
   ChevronRight,
   Clock,
   User,
@@ -35,6 +36,15 @@ interface ClipWithStarInfo extends AudioClip {
   url: string;
   starCount: number;
   isStarredByUser: boolean;
+  difficultyRating?: number | null;
+  difficultyRatingCount?: number;
+  userDifficultyRating?: number | null;
+  upvoteCount?: number;
+  downvoteCount?: number;
+  voteScore?: number;
+  userVote?: "up" | "down" | null;
+  charactersPerSecond?: number;
+  speedCategory?: "slow" | "medium" | "fast";
 }
 
 export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
@@ -66,12 +76,16 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
     const speakerAgeRange = searchParams.get("speakerAgeRange");
     const speakerDialect = searchParams.get("speakerDialect");
     const tags = searchParams.get("tags");
+    const speedFilter = searchParams.get("speedFilter");
 
     if (language) urlFilters.language = language;
     if (speakerGender) urlFilters.speakerGender = speakerGender as any;
     if (speakerAgeRange) urlFilters.speakerAgeRange = speakerAgeRange as any;
     if (speakerDialect) urlFilters.speakerDialect = speakerDialect;
     if (tags) urlFilters.tags = tags.split(",").filter(Boolean);
+    if (speedFilter && ["slow", "medium", "fast"].includes(speedFilter)) {
+      urlFilters.speedFilter = speedFilter as "slow" | "medium" | "fast";
+    }
 
     return urlFilters;
   });
@@ -158,6 +172,10 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
     if (filters.speakerDialect) {
       currentPreferences.speakerDialect = filters.speakerDialect;
     }
+    if (filters.speedFilter) {
+      currentPreferences.speedFilter = filters.speedFilter;
+    }
+    currentPreferences.defaultSort = sort;
 
     // Check if preferences have changed
     const lastSaved = lastSavedPreferencesRef.current;
@@ -166,7 +184,10 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
       lastSaved.language !== currentPreferences.language ||
       lastSaved.speakerGender !== currentPreferences.speakerGender ||
       lastSaved.speakerAgeRange !== currentPreferences.speakerAgeRange ||
-      lastSaved.speakerDialect !== currentPreferences.speakerDialect;
+      lastSaved.speakerDialect !== currentPreferences.speakerDialect ||
+      lastSaved.speedFilter !== currentPreferences.speedFilter ||
+      lastSaved.defaultSort?.field !== currentPreferences.defaultSort?.field ||
+      lastSaved.defaultSort?.direction !== currentPreferences.defaultSort?.direction;
 
     if (!hasChanged) return;
 
@@ -206,7 +227,7 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
     }, 1500);
 
     return () => clearTimeout(timeoutId);
-  }, [filters.language, filters.speakerGender, filters.speakerAgeRange, filters.speakerDialect, user, getAuthHeaders]);
+  }, [filters.language, filters.speakerGender, filters.speakerAgeRange, filters.speakerDialect, filters.speedFilter, sort, user, getAuthHeaders]);
 
   // Fetch available dialects when language changes
   useEffect(() => {
@@ -259,6 +280,9 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
       if (newFilters.tags && newFilters.tags.length > 0) {
         params.set("tags", newFilters.tags.join(","));
       }
+      if (newFilters.speedFilter) {
+        params.set("speedFilter", newFilters.speedFilter);
+      }
 
       // Add special filters
       if (newShowStarred) params.set("starred", "true");
@@ -297,7 +321,9 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
         searchParams?.get("language") ||
         searchParams?.get("speakerGender") ||
         searchParams?.get("speakerAgeRange") ||
-        searchParams?.get("speakerDialect");
+        searchParams?.get("speakerDialect") ||
+        searchParams?.get("speedFilter") ||
+        searchParams?.get("sortField");
 
       try {
         const headers = getAuthHeaders();
@@ -332,6 +358,17 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
             if (preferences.speakerDialect) {
               newFilters.speakerDialect = preferences.speakerDialect;
             }
+            if (preferences.speedFilter) {
+              newFilters.speedFilter = preferences.speedFilter;
+            }
+
+            // Apply sort preference if available
+            let newSort = sortRef.current;
+            if (preferences.defaultSort) {
+              newSort = preferences.defaultSort;
+              setSort(newSort);
+              sortRef.current = newSort;
+            }
 
             // Apply preferences to filters state BEFORE initial fetch
             setFilters(newFilters);
@@ -340,7 +377,7 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
             // Update URL to reflect applied preferences
             updateURL(
               newFilters,
-              sortRef.current,
+              newSort,
               searchTerm,
               showStarredRef.current,
               showMyUploadsRef.current
@@ -392,6 +429,9 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
       if (filters.uploadedBy) params.append("uploadedBy", filters.uploadedBy);
       if (filters.tags && filters.tags.length > 0) {
         params.append("tags", filters.tags.join(","));
+      }
+      if (filters.speedFilter) {
+        params.append("speedFilter", filters.speedFilter);
       }
 
       // Add special filters
@@ -502,12 +542,30 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
 
   const handleSortChange = (field: AudioSort["field"]) => {
     setSort((prev) => {
+      let newDirection: "asc" | "desc";
+      
+      if (prev.field === field) {
+        // Same field - toggle direction
+        newDirection = prev.direction === "asc" ? "desc" : "asc";
+      } else {
+        // New field - use sensible default direction
+        // Vote Score: desc (best first)
+        // Difficulty: asc (easiest first)
+        // Speed (charactersPerSecond): asc (slowest first)
+        // Title: asc (A-Z)
+        // Duration: asc (shortest first)
+        // Language: asc (A-Z)
+        // CreatedAt: desc (newest first)
+        if (field === "voteScore" || field === "createdAt") {
+          newDirection = "desc";
+        } else {
+          newDirection = "asc";
+        }
+      }
+      
       const newSort: AudioSort = {
         field,
-        direction:
-          prev.field === field && prev.direction === "asc"
-            ? ("desc" as const)
-            : ("asc" as const),
+        direction: newDirection,
       };
       updateURL(filters, newSort, searchTerm, showStarred, showMyUploads);
       // fetchClips will be called by useEffect when sort changes
@@ -867,6 +925,27 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
               )}
             </div>
 
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Speech Speed
+              </label>
+              <select
+                value={filters.speedFilter || ""}
+                onChange={(e) =>
+                  handleFilterChange(
+                    "speedFilter",
+                    e.target.value || undefined
+                  )
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="">All Speeds</option>
+                <option value="slow">Slow (bottom 33%)</option>
+                <option value="medium">Medium (middle 33%)</option>
+                <option value="fast">Fast (top 33%)</option>
+              </select>
+            </div>
+
             <div className="md:col-span-2 lg:col-span-4 flex justify-end">
               <button
                 onClick={clearFilters}
@@ -886,10 +965,18 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
       )}
 
       {/* Sort Controls */}
-      <div className="flex gap-2 text-sm">
+      <div className="flex gap-2 text-sm flex-wrap">
         <span className="text-gray-600">Sort by:</span>
-        {(["title", "duration", "language", "createdAt"] as const).map(
-          (field) => (
+        {([
+          { field: "voteScore" as const, label: "Vote Score (Best First)" },
+          { field: "difficulty" as const, label: "Difficulty (Easiest First)" },
+          { field: "charactersPerSecond" as const, label: "Speed (Slowest First)" },
+          { field: "title" as const, label: "Title" },
+          { field: "duration" as const, label: "Duration" },
+          { field: "language" as const, label: "Language" },
+          { field: "createdAt" as const, label: "Newest First" },
+        ] as const).map(
+          ({ field, label }) => (
             <button
               key={field}
               onClick={() => handleSortChange(field)}
@@ -899,15 +986,13 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
                   : "text-gray-600"
               }`}
             >
-              {field === "createdAt"
-                ? "Date"
-                : field.charAt(0).toUpperCase() + field.slice(1)}
+              {label}
               {sort.field === field && (
-                <ArrowUpDown
-                  className={`w-3 h-3 ${
-                    sort.direction === "desc" ? "rotate-180" : ""
-                  }`}
-                />
+                sort.direction === "asc" ? (
+                  <ChevronUp className="w-3 h-3" />
+                ) : (
+                  <ChevronDown className="w-3 h-3" />
+                )
               )}
             </button>
           )
@@ -968,7 +1053,7 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
                         <h3 className="font-medium text-gray-900">
                           {clip.title}
                         </h3>
-                        <div className="flex items-center gap-4 text-sm text-gray-500 mt-1">
+                        <div className="flex items-center gap-4 text-sm text-gray-500 mt-1 flex-wrap">
                           <span className="flex items-center gap-1">
                             <Clock className="w-3 h-3" />
                             {formatDuration(clip.duration)}
@@ -985,6 +1070,43 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
                             <span className="flex items-center gap-1 text-yellow-600">
                               <Star className="w-3 h-3 fill-current" />
                               {clip.starCount}
+                            </span>
+                          )}
+                          {clip.difficultyRating && (
+                            <span className="flex items-center gap-1 text-blue-600">
+                              <Star className="w-3 h-3 fill-current" />
+                              {clip.difficultyRating.toFixed(1)}
+                              {(clip.difficultyRatingCount ?? 0) > 0 && (
+                                <span className="text-xs">
+                                  ({clip.difficultyRatingCount})
+                                </span>
+                              )}
+                            </span>
+                          )}
+                          {(clip.voteScore !== undefined && clip.voteScore !== 0) || (clip.upvoteCount ?? 0) > 0 || (clip.downvoteCount ?? 0) > 0 ? (
+                            <span className={`flex items-center gap-1 ${
+                              (clip.voteScore ?? 0) > 0 ? "text-green-600" : 
+                              (clip.voteScore ?? 0) < 0 ? "text-red-600" : 
+                              "text-gray-500"
+                            }`}>
+                              {(clip.voteScore ?? 0) > 0 ? "+" : ""}{clip.voteScore ?? 0}
+                              <span className="text-xs text-gray-500">
+                                ({clip.upvoteCount ?? 0}↑/{clip.downvoteCount ?? 0}↓)
+                              </span>
+                            </span>
+                          ) : null}
+                          {clip.charactersPerSecond && (
+                            <span className="flex items-center gap-1 text-purple-600">
+                              {clip.charactersPerSecond.toFixed(1)} chars/s
+                              {clip.speedCategory && (
+                                <span className={`ml-1 px-1.5 py-0.5 rounded text-xs ${
+                                  clip.speedCategory === "slow" ? "bg-blue-100 text-blue-700" :
+                                  clip.speedCategory === "medium" ? "bg-yellow-100 text-yellow-700" :
+                                  "bg-orange-100 text-orange-700"
+                                }`}>
+                                  {clip.speedCategory}
+                                </span>
+                              )}
                             </span>
                           )}
                         </div>
