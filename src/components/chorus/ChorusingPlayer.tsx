@@ -52,13 +52,18 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
   const [error, setError] = useState<string | null>(null);
   const originalDurationRef = useRef<number>(0);
 
-  // Use ref for loop state to avoid stale closures in event handlers
+  // Use refs for loop and region state to avoid stale closures in event handlers
   const loopRef = useRef(false);
+  const regionRef = useRef<AudioRegion | null>(null);
 
-  // Sync loopRef with loop state
+  // Sync refs with state
   useEffect(() => {
     loopRef.current = loop;
   }, [loop]);
+
+  useEffect(() => {
+    regionRef.current = region;
+  }, [region]);
 
   /* ----------  Robust destroy helper  ------------------------------ */
   const destroy = useCallback((ws?: any) => {
@@ -219,7 +224,7 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
         ws.on("finish", () => {
           if (!mounted.current) return;
           const currentLoop = loopRef.current; // Use ref to get current loop state
-          const currentRegion = region; // Capture current region state
+          const currentRegion = regionRef.current; // Use ref to get current region state
           const dur = ws.getDuration();
 
           if (currentLoop) {
@@ -660,7 +665,7 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
       const t = ws.getCurrentTime();
       const currentIsPlaying = ws.isPlaying();
       const currentLoop = loopRef.current; // Use ref to get current loop state
-      const currentRegion = region; // Capture region state
+      const currentRegion = regionRef.current; // Use ref to get current region state
 
       if (currentRegion) {
         // If we have a region, enforce its boundaries
