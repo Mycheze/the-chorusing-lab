@@ -52,6 +52,14 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
   const [error, setError] = useState<string | null>(null);
   const originalDurationRef = useRef<number>(0);
 
+  // Use ref for loop state to avoid stale closures in event handlers
+  const loopRef = useRef(false);
+
+  // Sync loopRef with loop state
+  useEffect(() => {
+    loopRef.current = loop;
+  }, [loop]);
+
   /* ----------  Robust destroy helper  ------------------------------ */
   const destroy = useCallback((ws?: any) => {
     try {
@@ -208,7 +216,48 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
         });
         ws.on("play", () => mounted.current && setIsPlaying(true));
         ws.on("pause", () => mounted.current && setIsPlaying(false));
-        ws.on("finish", () => mounted.current && setIsPlaying(false));
+        ws.on("finish", () => {
+          if (!mounted.current) return;
+          const currentLoop = loopRef.current; // Use ref to get current loop state
+          const currentRegion = region; // Capture current region state
+          const dur = ws.getDuration();
+
+          if (currentLoop) {
+            // Loop is enabled - handle looping directly in finish event
+            // Temporarily disable regions to allow seeks
+            const regions = regionsRef.current;
+            let regionsWereEnabled = false;
+            if (regions && typeof regions.disable === "function") {
+              regions.disable();
+              regionsWereEnabled = true;
+            }
+
+            try {
+              const seekTime = currentRegion ? currentRegion.start : 0;
+              if (dur > 0) {
+                ws.seekTo(seekTime / dur);
+                ws.play();
+                // Don't set isPlaying(false) - keep it playing
+              } else {
+                setIsPlaying(false);
+              }
+            } catch (err) {
+              setIsPlaying(false);
+            }
+
+            // Re-enable regions
+            if (
+              regions &&
+              regionsWereEnabled &&
+              typeof regions.enable === "function"
+            ) {
+              regions.enable();
+            }
+          } else {
+            // Loop is disabled - stop playback
+            setIsPlaying(false);
+          }
+        });
         ws.on("timeupdate", (t: number) => {
           if (!mounted.current) return;
           // t is the current time in the original audio timeline
@@ -297,17 +346,20 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
   const playPause = useCallback(async () => {
     const ws = wsRef.current;
     if (!isReady || !ws) return;
-    
+
     // Resume audio context if suspended (required for autoplay policy)
     // This ensures playback works even if audio context was created before user interaction
-    if (audioContextRef.current && audioContextRef.current.state === "suspended") {
+    if (
+      audioContextRef.current &&
+      audioContextRef.current.state === "suspended"
+    ) {
       try {
         await audioContextRef.current.resume();
       } catch (err) {
         console.warn("Failed to resume audio context:", err);
       }
     }
-    
+
     isPlaying ? ws.pause() : ws.play();
   }, [isReady, isPlaying]);
 
@@ -350,7 +402,10 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
     if (!isReady || !ws) return;
 
     // Resume audio context if suspended (required for autoplay policy)
-    if (audioContextRef.current && audioContextRef.current.state === "suspended") {
+    if (
+      audioContextRef.current &&
+      audioContextRef.current.state === "suspended"
+    ) {
       try {
         await audioContextRef.current.resume();
       } catch (err) {
@@ -388,60 +443,63 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
     setIsPlaying(true);
   }, [isReady, region]);
 
-  const changeVolume = useCallback((v: number) => {
-    const ws = wsRef.current;
-    if (!isReady || !ws) return;
-    // Clamp volume to 0-3.0 (0-300%)
-    const vol = Math.max(0, Math.min(3, v));
+  const changeVolume = useCallback(
+    (v: number) => {
+      const ws = wsRef.current;
+      if (!isReady || !ws) return;
+      // Clamp volume to 0-3.0 (0-300%)
+      const vol = Math.max(0, Math.min(3, v));
 
-    try {
-      const backend = (ws as any).backend;
+      try {
+        const backend = (ws as any).backend;
 
-      // Try to get gain node from backend (WebAudio) or use our custom one (MediaElement)
-      let gainNode = backend?.gainNode;
+        // Try to get gain node from backend (WebAudio) or use our custom one (MediaElement)
+        let gainNode = backend?.gainNode;
 
-      // If no gainNode from backend, use our custom one for MediaElement
-      if (!gainNode) {
-        gainNode = gainNodeRef.current;
-      }
-
-      if (gainNode) {
-        // Ensure audio context is running
-        const audioContext = audioContextRef.current || backend?.ac;
-        if (audioContext && audioContext.state === "suspended") {
-          audioContext.resume().catch(console.error);
+        // If no gainNode from backend, use our custom one for MediaElement
+        if (!gainNode) {
+          gainNode = gainNodeRef.current;
         }
 
-        if (vol > 1.0) {
-          // For volumes > 100%, set WaveSurfer to max (1.0) and apply additional gain
-          ws.setVolume(1.0);
-          // Use setValueAtTime for smooth transitions, or direct assignment for immediate change
-          gainNode.gain.setValueAtTime(vol, audioContext?.currentTime || 0);
+        if (gainNode) {
+          // Ensure audio context is running
+          const audioContext = audioContextRef.current || backend?.ac;
+          if (audioContext && audioContext.state === "suspended") {
+            audioContext.resume().catch(console.error);
+          }
+
+          if (vol > 1.0) {
+            // For volumes > 100%, set WaveSurfer to max (1.0) and apply additional gain
+            ws.setVolume(1.0);
+            // Use setValueAtTime for smooth transitions, or direct assignment for immediate change
+            gainNode.gain.setValueAtTime(vol, audioContext?.currentTime || 0);
+          } else {
+            // For volumes <= 100%, use normal WaveSurfer volume
+            ws.setVolume(vol);
+            gainNode.gain.setValueAtTime(1.0, audioContext?.currentTime || 0); // Reset gain node to default
+          }
         } else {
-          // For volumes <= 100%, use normal WaveSurfer volume
-          ws.setVolume(vol);
-          gainNode.gain.setValueAtTime(1.0, audioContext?.currentTime || 0); // Reset gain node to default
+          // No gain node available, use standard WaveSurfer volume (limited to 100%)
+          const volClamped = Math.max(0, Math.min(1, vol));
+          ws.setVolume(volClamped);
+          if (vol > 1.0) {
+            console.warn(
+              "No gain node available, volume limited to 100%. Gain node ref:",
+              gainNodeRef.current
+            );
+          }
         }
-      } else {
-        // No gain node available, use standard WaveSurfer volume (limited to 100%)
+        setVolume(vol);
+      } catch (err) {
+        console.error("Failed to set volume:", err);
+        // Fallback to standard volume
         const volClamped = Math.max(0, Math.min(1, vol));
         ws.setVolume(volClamped);
-        if (vol > 1.0) {
-          console.warn(
-            "No gain node available, volume limited to 100%. Gain node ref:",
-            gainNodeRef.current
-          );
-        }
+        setVolume(volClamped);
       }
-      setVolume(vol);
-    } catch (err) {
-      console.error("Failed to set volume:", err);
-      // Fallback to standard volume
-      const volClamped = Math.max(0, Math.min(1, vol));
-      ws.setVolume(volClamped);
-      setVolume(volClamped);
-    }
-  }, [isReady]);
+    },
+    [isReady]
+  );
 
   const changePlaybackRate = useCallback(
     (rate: number) => {
@@ -585,20 +643,29 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
   /* Loop checker and region boundary enforcement                       */
   /* ------------------------------------------------------------------ */
   useEffect(() => {
-    if (!isPlaying || !wsRef.current) return;
+    // Keep interval running even if isPlaying becomes false temporarily
+    // The finish event will handle looping, but we keep this as backup for region boundaries
+    if (!wsRef.current) return;
     const ws = wsRef.current;
     const dur = ws.getDuration();
     if (dur <= 0) return;
+
+    // Only run interval if we're playing OR if loop is enabled (to catch edge cases)
+    const shouldRun = isPlaying || loopRef.current;
+    if (!shouldRun) return;
 
     const id = window.setInterval(() => {
       // getCurrentTime returns time in original audio timeline
       // This is correct for region boundaries (regions are in original time)
       const t = ws.getCurrentTime();
+      const currentIsPlaying = ws.isPlaying();
+      const currentLoop = loopRef.current; // Use ref to get current loop state
+      const currentRegion = region; // Capture region state
 
-      if (region) {
+      if (currentRegion) {
         // If we have a region, enforce its boundaries
         // Region times are in original audio time, which matches getCurrentTime
-        if (t >= region.end) {
+        if (t >= currentRegion.end) {
           // Temporarily disable regions to allow seeks
           const regions = regionsRef.current;
           let regionsWereEnabled = false;
@@ -607,10 +674,14 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
             regionsWereEnabled = true;
           }
 
-          if (loop) {
+          if (currentLoop) {
             // Loop: seek back to region start
-            ws.seekTo(region.start / dur);
-            ws.play();
+            try {
+              ws.seekTo(currentRegion.start / dur);
+              ws.play();
+            } catch (err) {
+              // Ignore seek errors
+            }
           } else {
             // No loop: stop at region end
             ws.pause();
@@ -625,7 +696,7 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
           ) {
             regions.enable();
           }
-        } else if (t < region.start) {
+        } else if (t < currentRegion.start) {
           // If somehow before region start, seek to start
           const regions = regionsRef.current;
           let regionsWereEnabled = false;
@@ -634,8 +705,12 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
             regionsWereEnabled = true;
           }
 
-          ws.seekTo(region.start / dur);
-          if (!isPlaying) ws.play();
+          try {
+            ws.seekTo(currentRegion.start / dur);
+            if (!currentIsPlaying) ws.play();
+          } catch (err) {
+            // Ignore seek errors
+          }
 
           if (
             regions &&
@@ -645,29 +720,41 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
             regions.enable();
           }
         }
-      } else if (loop && t >= dur - 0.05) {
+      } else if (currentLoop) {
         // No region, but looping: loop the whole clip
-        const regions = regionsRef.current;
-        let regionsWereEnabled = false;
-        if (regions && typeof regions.disable === "function") {
-          regions.disable();
-          regionsWereEnabled = true;
-        }
+        // Use a more reliable check - check if we're at or past the end
+        // Also check if audio actually finished (isPlaying becomes false)
+        const isAtEnd =
+          t >= dur - 0.01 || (!currentIsPlaying && t >= dur - 0.1);
 
-        ws.seekTo(0);
-        ws.play();
+        if (isAtEnd) {
+          const regions = regionsRef.current;
+          let regionsWereEnabled = false;
+          if (regions && typeof regions.disable === "function") {
+            regions.disable();
+            regionsWereEnabled = true;
+          }
 
-        if (
-          regions &&
-          regionsWereEnabled &&
-          typeof regions.enable === "function"
-        ) {
-          regions.enable();
+          try {
+            ws.seekTo(0);
+            ws.play();
+          } catch (err) {
+            // Ignore seek errors
+          }
+
+          if (
+            regions &&
+            regionsWereEnabled &&
+            typeof regions.enable === "function"
+          ) {
+            regions.enable();
+          }
         }
       }
     }, 60);
+
     return () => clearInterval(id);
-  }, [isPlaying, loop, region]);
+  }, [isPlaying, loop, region]); // Keep dependencies but use refs inside
 
   /* ------------------------------------------------------------------ */
   /* Helpers                                                             */
