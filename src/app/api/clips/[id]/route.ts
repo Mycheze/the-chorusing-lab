@@ -5,6 +5,7 @@ import path from "path";
 import type { AudioMetadata } from "@/types/audio";
 import { verifyAccessToken } from "@/lib/supabase";
 import { isAdmin } from "@/lib/admin";
+import { getSession } from "@/lib/session";
 
 const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads");
 
@@ -66,7 +67,9 @@ export async function PUT(
     }
 
     // Check if user owns this clip or is an admin
-    if (clip.uploadedBy !== userId && !isAdmin(userId)) {
+    const session = getSession(request);
+    const adminCheck = session ? isAdmin(session.refoldId) : false;
+    if (clip.uploadedBy !== userId && !adminCheck) {
       return NextResponse.json(
         { error: "Unauthorized to edit this clip" },
         { status: 403 }
@@ -99,7 +102,8 @@ export async function PUT(
           metadata: cleanMetadata,
         },
         accessToken,
-        userId
+        userId,
+        session?.refoldId
       );
 
       if (!updatedClip) {
@@ -181,7 +185,9 @@ export async function DELETE(
     }
 
     // Check if user owns this clip or is an admin
-    if (clip.uploadedBy !== userId && !isAdmin(userId)) {
+    const deleteSession = getSession(request);
+    const deleteAdminCheck = deleteSession ? isAdmin(deleteSession.refoldId) : false;
+    if (clip.uploadedBy !== userId && !deleteAdminCheck) {
       return NextResponse.json(
         { error: "Unauthorized to delete this clip" },
         { status: 403 }
@@ -190,7 +196,7 @@ export async function DELETE(
 
     // Delete from database first
     try {
-      const deleted = await serverDb.deleteAudioClip(id, userId, accessToken);
+      const deleted = await serverDb.deleteAudioClip(id, userId, accessToken, deleteSession?.refoldId);
 
       if (!deleted) {
         return NextResponse.json(

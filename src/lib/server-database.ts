@@ -475,7 +475,8 @@ class SupabaseDatabase {
   async deleteAudioClip(
     id: string,
     userId: string,
-    accessToken?: string
+    accessToken?: string,
+    refoldId?: number
   ): Promise<boolean> {
     const client = this.getAuthenticatedClient(accessToken);
 
@@ -491,7 +492,8 @@ class SupabaseDatabase {
     }
 
     // Check if user owns this clip or is an admin
-    if (clip.uploaded_by !== userId && !isAdmin(userId)) {
+    const adminCheck = refoldId != null ? isAdmin(refoldId) : false;
+    if (clip.uploaded_by !== userId && !adminCheck) {
       throw new Error("Unauthorized to delete this clip");
     }
 
@@ -549,7 +551,8 @@ class SupabaseDatabase {
     id: string,
     updates: Partial<Pick<AudioClip, "title" | "metadata">>,
     accessToken?: string,
-    userId?: string
+    userId?: string,
+    refoldId?: number
   ): Promise<AudioClip | null> {
     const client = this.getAuthenticatedClient(accessToken);
 
@@ -582,10 +585,11 @@ class SupabaseDatabase {
     }
 
     // Check if user owns this clip or is an admin (if we have userId)
+    const updateAdminCheck = refoldId != null ? isAdmin(refoldId) : false;
     if (
       resolvedUserId &&
       clip.uploaded_by !== resolvedUserId &&
-      !isAdmin(resolvedUserId)
+      !updateAdminCheck
     ) {
       throw new Error("Unauthorized to update this clip");
     }

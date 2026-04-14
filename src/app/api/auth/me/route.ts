@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ user: null });
   }
 
-  const admin = isAdmin(session.userId);
+  const admin = isAdmin(session.refoldId);
 
   return NextResponse.json({
     user: {
