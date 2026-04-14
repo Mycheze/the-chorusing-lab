@@ -12,6 +12,7 @@ export interface Database {
       profiles: {
         Row: {
           id: string
+          refold_id: number | null
           username: string
           email: string
           created_at: string
@@ -20,6 +21,7 @@ export interface Database {
         }
         Insert: {
           id: string
+          refold_id?: number | null
           username: string
           email: string
           created_at?: string
@@ -28,6 +30,7 @@ export interface Database {
         }
         Update: {
           id?: string
+          refold_id?: number | null
           username?: string
           email?: string
           created_at?: string
