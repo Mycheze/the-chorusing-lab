@@ -5,14 +5,15 @@ export interface User {
   refoldId?: number; // Refold SSO user ID (profiles.refold_id)
   username: string;
   email: string;
-  createdAt: string;
+  /** @deprecated Not included in SSO session. Kept for server-database.ts compatibility. */
+  createdAt?: string;
   isAdmin?: boolean;
 }
 
 /**
  * @deprecated SSO replaces email/password login. Kept temporarily for
- * backward compatibility with existing AuthProvider (will be removed when
- * the frontend auth is migrated).
+ * backward compatibility with LoginForm (will be removed when
+ * the frontend auth forms are replaced).
  */
 export interface LoginCredentials {
   email: string;
@@ -21,8 +22,8 @@ export interface LoginCredentials {
 
 /**
  * @deprecated SSO replaces email/password registration. Kept temporarily for
- * backward compatibility with existing AuthProvider (will be removed when
- * the frontend auth is migrated).
+ * backward compatibility with RegisterForm (will be removed when
+ * the frontend auth forms are replaced).
  */
 export interface RegisterCredentials {
   email: string;
@@ -38,7 +39,9 @@ export interface AuthState {
 }
 
 export interface AuthContextType extends AuthState {
-  login: (credentials: LoginCredentials) => Promise<void>;
-  register: (credentials: RegisterCredentials) => Promise<void>;
+  isAuthenticated: boolean;
+  login: (credentials?: any) => void;
+  register: (credentials?: any) => Promise<void>;
   logout: () => void;
+  getAuthHeaders: () => HeadersInit;
 }
