@@ -251,19 +251,15 @@ export function useClipFilters(userId?: string): UseClipFiltersReturn {
     fetchDialects();
   }, [filters.language]);
 
+  // Reset preferences loaded flag on unmount so returning to /library re-applies them
+  useEffect(() => {
+    return () => {
+      preferencesLoadedRef.current = false;
+    };
+  }, []);
+
   // Load user preferences BEFORE initial fetch to avoid flashing
   useEffect(() => {
-    // If we navigated back without URL filter params, allow preferences to reload
-    const hasUrlPreferenceParams =
-      searchParams?.get("language") ||
-      searchParams?.get("speakerGender") ||
-      searchParams?.get("speakerAgeRange") ||
-      searchParams?.get("speakerDialect") ||
-      searchParams?.get("speedFilter") ||
-      searchParams?.get("sortField");
-    if (!hasUrlPreferenceParams && preferencesLoadedRef.current) {
-      preferencesLoadedRef.current = false;
-    }
     if (preferencesLoadedRef.current) return;
 
     const loadPreferences = async () => {
