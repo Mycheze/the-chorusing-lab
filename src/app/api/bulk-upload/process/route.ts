@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { serverDb } from '@/lib/server-database';
-import { uploadAudioFile, createAuthenticatedClient, verifyAccessToken } from '@/lib/supabase';
+import { uploadAudioFile } from '@/lib/supabase';
+import { getSession } from '@/lib/session';
 import type { AudioMetadata } from '@/types/audio';
 
 const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB
@@ -32,31 +33,20 @@ function validateFile(file: File): string | null {
 
 export async function POST(request: NextRequest) {
   try {
-    // Get auth token
-    const authHeader = request.headers.get('Authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    // Authenticate via session cookie
+    const session = getSession(request);
+    if (!session) {
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }
       );
     }
 
-    const accessToken = authHeader.substring(7);
-    const { user, error: authError } = await verifyAccessToken(accessToken);
-
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: 'Invalid authentication' },
-        { status: 401 }
-      );
-    }
-
-    const userId = user.id;
-    const authenticatedClient = createAuthenticatedClient(accessToken);
+    const userId = session.userId;
 
     // Parse form data
     const formData = await request.formData();
-    
+
     const file = formData.get('file') as File;
     const title = formData.get('title') as string;
     const durationStr = formData.get('duration') as string;
@@ -101,7 +91,7 @@ export async function POST(request: NextRequest) {
 
     // Get duration from form data (calculated client-side)
     let duration: number;
-    
+
     if (durationStr && !isNaN(Number(durationStr)) && Number(durationStr) > 0 && isFinite(Number(durationStr))) {
       duration = Number(durationStr);
     } else {
@@ -118,7 +108,7 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    
+
     if (duration > 300) {
       return NextResponse.json(
         { error: 'Audio file too long. Maximum duration is 5 minutes for direct uploads.' },
@@ -149,14 +139,14 @@ export async function POST(request: NextRequest) {
 
     try {
       // Upload file to Supabase Storage
-      const storagePath = await uploadAudioFile(file, userId, filename, authenticatedClient);
+      const storagePath = await uploadAudioFile(file, userId, filename);
 
       // Prepare metadata
       const metadata: AudioMetadata = {
         language: language.trim(),
         speakerGender: speakerGender as any || undefined,
         speakerAgeRange: speakerAgeRange as any || undefined,
-        speakerDialect: speakerDialect?.trim() || undefined, // Empty string becomes undefined (optional field)
+        speakerDialect: speakerDialect?.trim() || undefined,
         transcript: transcript || undefined,
         sourceUrl: sourceUrl || undefined,
         tags: tags ? tags.split(',').map(tag => tag.trim()).filter(Boolean) : [],
@@ -172,7 +162,7 @@ export async function POST(request: NextRequest) {
         storagePath,
         metadata,
         uploadedBy: userId,
-      }, accessToken);
+      }, userId);
 
       return NextResponse.json({
         success: true,

@@ -3,7 +3,6 @@ import { serverDb } from "@/lib/server-database";
 import { unlink } from "fs/promises";
 import path from "path";
 import type { AudioMetadata } from "@/types/audio";
-import { verifyAccessToken } from "@/lib/supabase";
 import { isAdmin } from "@/lib/admin";
 import { getSession } from "@/lib/session";
 
@@ -15,34 +14,17 @@ export async function PUT(
 ) {
   try {
     const { id } = params;
-    // Get user from auth header
-    let userId: string | null = null;
-    let accessToken: string | null = null;
-    const authHeader = request.headers.get("Authorization");
 
-    if (authHeader && authHeader.startsWith("Bearer ")) {
-      accessToken = authHeader.substring(7);
-      
-      // Verify token using standard client (no custom storage)
-      const { user, error: authError } = await verifyAccessToken(accessToken);
-      
-      if (authError) {
-        console.error("❌ Token verification failed:", authError.message);
-        return NextResponse.json(
-          { error: "Invalid authentication" },
-          { status: 401 }
-        );
-      }
-      
-      if (user) userId = user.id;
-    }
-
-    if (!userId || !accessToken) {
+    // Authenticate via session cookie
+    const session = getSession(request);
+    if (!session) {
       return NextResponse.json(
         { error: "Authentication required" },
         { status: 401 }
       );
     }
+
+    const userId = session.userId;
 
     const body = await request.json();
     const { title, metadata } = body;
@@ -60,15 +42,14 @@ export async function PUT(
     }
 
     // Get the clip first to check ownership
-    const clip = await serverDb.getAudioClipById(id, accessToken);
+    const clip = await serverDb.getAudioClipById(id);
 
     if (!clip) {
       return NextResponse.json({ error: "Clip not found" }, { status: 404 });
     }
 
     // Check if user owns this clip or is an admin
-    const session = getSession(request);
-    const adminCheck = session ? isAdmin(session.refoldId) : false;
+    const adminCheck = isAdmin(session.refoldId);
     if (clip.uploadedBy !== userId && !adminCheck) {
       return NextResponse.json(
         { error: "Unauthorized to edit this clip" },
@@ -101,9 +82,8 @@ export async function PUT(
           title: title.trim(),
           metadata: cleanMetadata,
         },
-        accessToken,
         userId,
-        session?.refoldId
+        session.refoldId
       );
 
       if (!updatedClip) {
@@ -116,21 +96,18 @@ export async function PUT(
       });
     } catch (updateError: any) {
       console.error("Update clip error in catch block:", updateError);
-      // If updateAudioClip throws an error (e.g., unauthorized), handle it
       if (updateError.message?.includes("Unauthorized")) {
         return NextResponse.json(
           { error: "Unauthorized to edit this clip" },
           { status: 403 }
         );
       }
-      // If it's a database permission error, provide helpful message
       if (updateError.message?.includes("Database permission error")) {
         return NextResponse.json(
           { error: updateError.message },
           { status: 403 }
         );
       }
-      // Re-throw other errors to be caught by outer try-catch
       throw updateError;
     }
   } catch (error) {
@@ -148,46 +125,28 @@ export async function DELETE(
 ) {
   try {
     const { id } = params;
-    // Get user from auth header
-    let userId: string | null = null;
-    let accessToken: string | null = null;
-    const authHeader = request.headers.get("Authorization");
 
-    if (authHeader && authHeader.startsWith("Bearer ")) {
-      accessToken = authHeader.substring(7);
-      
-      // Verify token using standard client (no custom storage)
-      const { user, error: authError } = await verifyAccessToken(accessToken);
-      
-      if (authError) {
-        console.error("❌ Token verification failed:", authError.message);
-        return NextResponse.json(
-          { error: "Invalid authentication" },
-          { status: 401 }
-        );
-      }
-      
-      if (user) userId = user.id;
-    }
-
-    if (!userId || !accessToken) {
+    // Authenticate via session cookie
+    const session = getSession(request);
+    if (!session) {
       return NextResponse.json(
         { error: "Authentication required" },
         { status: 401 }
       );
     }
 
+    const userId = session.userId;
+
     // Get the clip first to check ownership and get filename
-    const clip = await serverDb.getAudioClipById(id, accessToken);
+    const clip = await serverDb.getAudioClipById(id);
 
     if (!clip) {
       return NextResponse.json({ error: "Clip not found" }, { status: 404 });
     }
 
     // Check if user owns this clip or is an admin
-    const deleteSession = getSession(request);
-    const deleteAdminCheck = deleteSession ? isAdmin(deleteSession.refoldId) : false;
-    if (clip.uploadedBy !== userId && !deleteAdminCheck) {
+    const adminCheck = isAdmin(session.refoldId);
+    if (clip.uploadedBy !== userId && !adminCheck) {
       return NextResponse.json(
         { error: "Unauthorized to delete this clip" },
         { status: 403 }
@@ -196,7 +155,7 @@ export async function DELETE(
 
     // Delete from database first
     try {
-      const deleted = await serverDb.deleteAudioClip(id, userId, accessToken, deleteSession?.refoldId);
+      const deleted = await serverDb.deleteAudioClip(id, userId, session.refoldId);
 
       if (!deleted) {
         return NextResponse.json(
@@ -206,21 +165,18 @@ export async function DELETE(
       }
     } catch (deleteError: any) {
       console.error("Delete clip error in catch block:", deleteError);
-      // If deleteAudioClip throws an error (e.g., unauthorized), handle it
       if (deleteError.message?.includes("Unauthorized")) {
         return NextResponse.json(
           { error: "Unauthorized to delete this clip" },
           { status: 403 }
         );
       }
-      // If it's a database permission error, provide helpful message
       if (deleteError.message?.includes("Database permission error")) {
         return NextResponse.json(
           { error: deleteError.message },
           { status: 403 }
         );
       }
-      // Re-throw other errors to be caught by outer try-catch
       throw deleteError;
     }
 
@@ -230,7 +186,6 @@ export async function DELETE(
       await unlink(filePath);
       console.log(`Deleted file: ${clip.filename}`);
     } catch (fileError) {
-      // Log but don't fail - file might already be deleted or not exist
       console.warn(`Could not delete file ${clip.filename}:`, fileError);
     }
 

@@ -1,45 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { serverDb } from "@/lib/server-database";
-import { verifyAccessToken } from "@/lib/supabase";
+import { getSession } from "@/lib/session";
 import type { FilterPreferences } from "@/types/audio";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   try {
-    const authHeader = request.headers.get("Authorization");
-
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    // Authenticate via session cookie
+    const session = getSession(request);
+    if (!session) {
       return NextResponse.json(
         { error: "Authentication required" },
         { status: 401 }
       );
     }
 
-    const accessToken = authHeader.substring(7);
-
-    // Verify token using standard client (no custom storage)
-    const { user, error: authError } = await verifyAccessToken(accessToken);
-
-    if (authError) {
-      console.error("❌ Token verification failed:", authError.message);
-      return NextResponse.json(
-        { error: "Invalid authentication" },
-        { status: 401 }
-      );
-    }
-
-    if (!user) {
-      return NextResponse.json(
-        { error: "Authentication required" },
-        { status: 401 }
-      );
-    }
-
-    const preferences = await serverDb.getUserFilterPreferences(
-      user.id,
-      accessToken
-    );
+    const preferences = await serverDb.getUserFilterPreferences(session.userId);
 
     return NextResponse.json({ preferences });
   } catch (error) {
@@ -53,29 +30,9 @@ export async function GET(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const authHeader = request.headers.get("Authorization");
-
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return NextResponse.json(
-        { error: "Authentication required" },
-        { status: 401 }
-      );
-    }
-
-    const accessToken = authHeader.substring(7);
-
-    // Verify token using standard client (no custom storage)
-    const { user, error: authError } = await verifyAccessToken(accessToken);
-
-    if (authError) {
-      console.error("❌ Token verification failed:", authError.message);
-      return NextResponse.json(
-        { error: "Invalid authentication" },
-        { status: 401 }
-      );
-    }
-
-    if (!user) {
+    // Authenticate via session cookie
+    const session = getSession(request);
+    if (!session) {
       return NextResponse.json(
         { error: "Authentication required" },
         { status: 401 }
@@ -185,9 +142,8 @@ export async function PUT(request: NextRequest) {
     }
 
     await serverDb.saveUserFilterPreferences(
-      user.id,
+      session.userId,
       preferences as FilterPreferences,
-      accessToken
     );
 
     return NextResponse.json({ success: true });

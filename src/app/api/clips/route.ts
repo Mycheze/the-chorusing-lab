@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { serverDb } from "@/lib/server-database";
-import { getPublicUrl, createAuthenticatedClient } from "@/lib/supabase";
+import { getPublicUrl } from "@/lib/supabase";
+import { getSession } from "@/lib/session";
 import type { AudioClip, AudioFilters, AudioSort } from "@/types/audio";
-import type { Database } from "@/types/supabase";
 
 export const dynamic = "force-dynamic";
 
@@ -11,22 +10,9 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
 
-    // Get user from auth header if present
-    let userId: string | null = null;
-    let accessToken: string | null = null;
-    const authHeader = request.headers.get("Authorization");
-
-    if (authHeader && authHeader.startsWith("Bearer ")) {
-      accessToken = authHeader.substring(7);
-      const authenticatedClient = createAuthenticatedClient(accessToken);
-
-      const {
-        data: { user },
-      } = await authenticatedClient.auth.getUser();
-      if (user) {
-        userId = user.id;
-      }
-    }
+    // Get user from session cookie
+    const session = getSession(request);
+    const userId = session?.userId ?? null;
 
     // Parse filters
     const filters: AudioFilters = {};
@@ -105,65 +91,55 @@ export async function GET(request: NextRequest) {
     const limit = limitParam ? parseInt(limitParam) : undefined;
 
     // For discovery fields, we need to sort in-memory, so use a default DB sort
-    // Discovery fields: voteScore, difficulty, charactersPerSecond
     const isDiscoverySort = sort.field === "voteScore" || sort.field === "difficulty" || sort.field === "charactersPerSecond";
-    const dbSort: AudioSort = isDiscoverySort 
-      ? { field: "createdAt", direction: "desc" } 
+    const dbSort: AudioSort = isDiscoverySort
+      ? { field: "createdAt", direction: "desc" }
       : sort;
 
-    // Get clips from database with auth context
-    // Note: speedFilter is handled in-memory after we get discovery stats
+    // Get clips from database
     const dbFilters = { ...filters };
-    delete (dbFilters as any).speedFilter; // Remove speedFilter from DB query
-    
+    delete (dbFilters as any).speedFilter;
+
     let clips: AudioClip[] = [];
     try {
       clips = await serverDb.getAudioClips(
         dbFilters,
         dbSort,
         limit,
-        accessToken || undefined
       );
     } catch (error) {
       console.error("Failed to fetch clips from database:", error);
-      // Return empty array instead of failing completely
-      // This allows the UI to still render, just with no clips
       clips = [];
     }
 
     // Filter by starred clips if requested
-    if (showStarred && userId && accessToken) {
+    if (showStarred && userId) {
       try {
-        const starredClipIds = await serverDb.getUserStarredClips(
-          userId,
-          accessToken
-        );
+        const starredClipIds = await serverDb.getUserStarredClips(userId);
         clips = clips.filter((clip) => starredClipIds.includes(clip.id));
       } catch (error) {
         console.warn("Failed to get starred clips, continuing without filter:", error);
-        // Continue without filtering - better than failing completely
       }
     }
 
-    // Batch fetch all discovery stats for all clips at once (fixes N+1 query problem)
+    // Batch fetch all discovery stats for all clips at once
     const clipIds = clips.map((clip) => clip.id);
-    
-    // Fetch all stars, difficulty ratings, and votes in parallel using batch methods
+
     const [starsMap, difficultyRatingsMap, votesMap] = await Promise.all([
       clipIds.length > 0
-        ? serverDb.getClipStarsBatch(clipIds, accessToken || undefined).catch((error) => {
+        ? serverDb.getClipStarsBatch(clipIds).catch((error) => {
             console.warn("Failed to get stars batch:", error);
             return new Map<string, string[]>();
           })
         : Promise.resolve(new Map<string, string[]>()),
       clipIds.length > 0
-        ? serverDb.getClipDifficultyRatingsBatch(clipIds, accessToken || undefined).catch((error) => {
+        ? serverDb.getClipDifficultyRatingsBatch(clipIds, userId || undefined).catch((error) => {
             console.warn("Failed to get difficulty ratings batch:", error);
             return new Map<string, { average: number | null; count: number; userRating: number | null }>();
           })
         : Promise.resolve(new Map<string, { average: number | null; count: number; userRating: number | null }>()),
       clipIds.length > 0
-        ? serverDb.getClipVotesBatch(clipIds, accessToken || undefined).catch((error) => {
+        ? serverDb.getClipVotesBatch(clipIds, userId || undefined).catch((error) => {
             console.warn("Failed to get votes batch:", error);
             return new Map<string, { upvoteCount: number; downvoteCount: number; voteScore: number; userVote: "up" | "down" | null }>();
           })
@@ -172,27 +148,17 @@ export async function GET(request: NextRequest) {
 
     // Add discovery stats, file URLs, and star info to clips
     const clipsWithDiscovery = clips.map((clip) => {
-      // Get star info from batch map
       const starredBy = starsMap.get(clip.id) || [];
-      
-      // Get difficulty rating from batch map
       const difficultyRating = difficultyRatingsMap.get(clip.id) || { average: null, count: 0, userRating: null };
-      
-      // Get votes from batch map
       const votes = votesMap.get(clip.id) || { upvoteCount: 0, downvoteCount: 0, voteScore: 0, userVote: null as "up" | "down" | null };
-
-      // Calculate characters per second (no DB call, safe)
       const charactersPerSecond = serverDb.calculateCharactersPerSecond(clip);
 
-      // Get the storage path for the clip - we need to handle both old and new format
       let publicUrl: string;
       const clipWithPath = clip as any;
 
       if (clipWithPath.storagePath) {
-        // New format: use storage path
         publicUrl = getPublicUrl(clipWithPath.storagePath);
       } else {
-        // Fallback: construct path and use file serving API
         publicUrl = `/api/files/${clip.filename}`;
       }
 
@@ -236,8 +202,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Apply sorting for discovery fields (these need to be sorted in-memory)
-    // Also handle regular DB sort fields if they weren't sorted by DB (shouldn't happen, but just in case)
+    // Apply sorting for discovery fields
     if (isDiscoverySort || sort.field === "voteScore" || sort.field === "difficulty" || sort.field === "charactersPerSecond") {
       filteredClips.sort((a, b) => {
         let aValue: number | null = null;
@@ -253,11 +218,9 @@ export async function GET(request: NextRequest) {
           aValue = (a as any).charactersPerSecond ?? null;
           bValue = (b as any).charactersPerSecond ?? null;
         } else {
-          // Fallback for other fields (shouldn't reach here, but handle gracefully)
           return 0;
         }
 
-        // Handle null values (put them at the end)
         if (aValue === null && bValue === null) return 0;
         if (aValue === null) return 1;
         if (bValue === null) return -1;

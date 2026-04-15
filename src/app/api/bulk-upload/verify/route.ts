@@ -1,24 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAccessToken } from '@/lib/supabase';
+import { getSession } from '@/lib/session';
 import { matchFilesToCSV } from '@/lib/bulk-upload/file-matcher';
 
 export async function POST(request: NextRequest) {
   try {
-    // Get auth token
-    const authHeader = request.headers.get('Authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    // Authenticate via session cookie
+    const session = getSession(request);
+    if (!session) {
       return NextResponse.json(
         { error: 'Authentication required' },
-        { status: 401 }
-      );
-    }
-
-    const accessToken = authHeader.substring(7);
-    const { user, error: authError } = await verifyAccessToken(accessToken);
-
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: 'Invalid authentication' },
         { status: 401 }
       );
     }
@@ -41,7 +31,6 @@ export async function POST(request: NextRequest) {
     }
 
     // Convert filenames to File-like objects for matching
-    // We only need the name property for matching
     const fileObjects = uploadedFilenames.map((filename: string) => ({
       name: filename,
     })) as File[];

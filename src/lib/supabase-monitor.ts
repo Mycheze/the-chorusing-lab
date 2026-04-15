@@ -17,7 +17,7 @@ export interface RequestLog {
 
 export interface ClientInstance {
   id: string;
-  type: 'authenticated' | 'anonymous' | 'server';
+  type: 'authenticated' | 'anonymous' | 'server' | 'service-role';
   createdAt: number;
   lastUsed: number;
   requestCount: number;
@@ -156,7 +156,7 @@ class SupabaseMonitor {
   /**
    * Register a client instance
    */
-  registerClient(type: 'authenticated' | 'anonymous' | 'server'): string {
+  registerClient(type: 'authenticated' | 'anonymous' | 'server' | 'service-role'): string {
     const id = `client-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     this.clientInstances.set(id, {
       id,
