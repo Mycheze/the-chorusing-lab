@@ -129,7 +129,7 @@ export function RelatedClips({ currentClip }: RelatedClipsProps) {
             >
               {/* Clip Header */}
               <div className="mb-2">
-                <h4 className="font-medium text-gray-900 text-sm leading-tight mb-1 break-words">
+                <h4 className="font-medium text-gray-900 text-sm leading-tight mb-1 truncate" title={clip.title}>
                   {clip.title}
                 </h4>
                 <div className="flex items-center gap-3 text-xs text-gray-500">

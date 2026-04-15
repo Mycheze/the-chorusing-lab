@@ -1132,7 +1132,7 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
                       </div>
 
                       <div className="flex-1">
-                        <h3 className="font-medium text-gray-900">
+                        <h3 className="font-medium text-gray-900 truncate">
                           {clip.title}
                         </h3>
                         <div className="flex items-center gap-4 text-sm text-gray-500 mt-1 flex-wrap">
