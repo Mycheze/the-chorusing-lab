@@ -129,8 +129,10 @@ export function RelatedClips({ currentClip }: RelatedClipsProps) {
             >
               {/* Clip Header */}
               <div className="mb-2">
-                <div className="flex items-center gap-3 text-xs font-medium text-gray-700">
-                  <span>{clip.metadata.language}</span>
+                <h4 className="font-medium text-gray-900 text-sm leading-tight mb-1 break-words">
+                  {clip.title}
+                </h4>
+                <div className="flex items-center gap-3 text-xs text-gray-500">
                   <span className="flex items-center gap-1">
                     <Clock className="w-3 h-3" />
                     {formatDuration(clip.duration)}
@@ -148,9 +150,6 @@ export function RelatedClips({ currentClip }: RelatedClipsProps) {
                     </span>
                   )}
                 </div>
-                {clip.title && (
-                  <p className="text-xs text-gray-400 truncate mt-0.5">{clip.title}</p>
-                )}
               </div>
 
               {/* Tags (if any) */}

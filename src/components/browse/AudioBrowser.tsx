@@ -1132,7 +1132,10 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
                       </div>
 
                       <div className="flex-1">
-                        <div className="flex items-center gap-4 text-sm font-medium text-gray-900 flex-wrap">
+                        <h3 className="font-medium text-gray-900">
+                          {clip.title}
+                        </h3>
+                        <div className="flex items-center gap-4 text-sm text-gray-500 mt-1 flex-wrap">
                           <span className="flex items-center gap-1">
                             <Clock className="w-3 h-3" />
                             {formatDuration(clip.duration)}
@@ -1189,9 +1192,6 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
                             </span>
                           )}
                         </div>
-                        {clip.title && (
-                          <p className="text-xs text-gray-400 truncate mt-0.5">{clip.title}</p>
-                        )}
                       </div>
                     </div>
 
