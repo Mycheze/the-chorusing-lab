@@ -1122,7 +1122,7 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
                   onClick={() => toggleExpanded(clip.id)}
                 >
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4 flex-1">
+                    <div className="flex items-center gap-4 flex-1 min-w-0">
                       <div className="text-gray-400 hover:text-gray-600">
                         {expandedClip === clip.id ? (
                           <ChevronDown className="w-5 h-5" />
