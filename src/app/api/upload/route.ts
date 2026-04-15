@@ -3,30 +3,7 @@ import { serverDb } from '@/lib/server-database';
 import { uploadAudioFile } from '@/lib/supabase';
 import { getSession } from '@/lib/session';
 import type { AudioMetadata } from '@/types/audio';
-
-const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB
-const SUPPORTED_FORMATS = ['mp3', 'wav', 'm4a', 'ogg', 'webm'];
-
-function generateUniqueFilename(originalName: string): string {
-  const timestamp = Date.now();
-  const random = Math.random().toString(36).substring(2);
-  const extension = originalName.split('.').pop()?.toLowerCase() || '';
-  const baseName = originalName.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9\-_]/g, '_');
-  return `${timestamp}-${random}-${baseName}.${extension}`;
-}
-
-function validateFile(file: File): string | null {
-  if (file.size > MAX_FILE_SIZE) {
-    return `File too large. Maximum size is ${MAX_FILE_SIZE / (1024 * 1024)}MB.`;
-  }
-
-  const extension = file.name.split('.').pop()?.toLowerCase();
-  if (!extension || !SUPPORTED_FORMATS.includes(extension)) {
-    return `Unsupported format. Supported formats: ${SUPPORTED_FORMATS.join(', ')}`;
-  }
-
-  return null;
-}
+import { MAX_FILE_SIZE, generateUniqueFilename, validateFile } from '@/lib/upload-utils';
 
 // Helper function to calculate audio duration from file
 async function calculateAudioDuration(file: File): Promise<number> {

@@ -1,12 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { serverDb } from "@/lib/server-database";
-import { unlink } from "fs/promises";
-import path from "path";
 import type { AudioMetadata } from "@/types/audio";
 import { isAdmin } from "@/lib/admin";
 import { getSession } from "@/lib/session";
-
-const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads");
 
 export async function PUT(
   request: NextRequest,
@@ -178,15 +174,6 @@ export async function DELETE(
         );
       }
       throw deleteError;
-    }
-
-    // Try to delete the physical file (don't fail if file doesn't exist)
-    try {
-      const filePath = path.join(UPLOAD_DIR, clip.filename);
-      await unlink(filePath);
-      console.log(`Deleted file: ${clip.filename}`);
-    } catch (fileError) {
-      console.warn(`Could not delete file ${clip.filename}:`, fileError);
     }
 
     return NextResponse.json({

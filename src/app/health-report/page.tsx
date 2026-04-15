@@ -40,6 +40,7 @@ interface HealthReportData {
 export default function HealthReportPage() {
   const [data, setData] = useState<HealthReportData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [filterType, setFilterType] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
@@ -53,6 +54,10 @@ export default function HealthReportPage() {
       if (response.ok) {
         const healthData = await response.json();
         setData(healthData);
+      } else if (response.status === 403) {
+        setError("Access denied. Admin privileges required.");
+      } else {
+        setError("Failed to load health report.");
       }
     } catch (error) {
       console.error("Failed to fetch health report:", error);
@@ -130,12 +135,12 @@ export default function HealthReportPage() {
     );
   }
 
-  if (!data) {
+  if (error || !data) {
     return (
       <div className="min-h-screen p-8">
         <div className="max-w-7xl mx-auto">
           <h1 className="text-3xl font-bold mb-4">Health Report</h1>
-          <p className="text-red-600">Failed to load health report</p>
+          <p className="text-red-600">{error || "Failed to load health report"}</p>
         </div>
       </div>
     );

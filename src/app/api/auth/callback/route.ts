@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-import { createClient } from "@supabase/supabase-js";
 import {
   createSessionToken,
   setSessionCookie,
   type SessionPayload,
 } from "@/lib/session";
+import { getServiceClient } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
@@ -19,23 +19,6 @@ interface ProfileRecord {
   email: string;
   created_at: string;
   updated_at: string;
-}
-
-function getSupabaseServer() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (process.env.NODE_ENV === "production" && !serviceRoleKey) {
-    throw new Error("SUPABASE_SERVICE_ROLE_KEY is required in production");
-  }
-  const key = serviceRoleKey || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) {
-    throw new Error("Missing Supabase environment variables");
-  }
-  // Use an untyped client to avoid the pre-existing `never` type issues with
-  // the generated Database type and the current Supabase client version.
-  return createClient(url, key, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
 }
 
 export async function GET(request: NextRequest) {
@@ -98,7 +81,7 @@ export async function GET(request: NextRequest) {
     }
 
     const username = name || `user_${refoldId}`;
-    const db = getSupabaseServer();
+    const db = getServiceClient();
 
     // Strategy:
     // 1. Try to find existing profile by refold_id (returning user)

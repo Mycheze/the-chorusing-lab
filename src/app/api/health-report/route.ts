@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseMonitor } from "@/lib/supabase-monitor";
 import { supabase } from "@/lib/supabase";
 import { serverDb } from "@/lib/server-database";
+import { getSession } from "@/lib/session";
+import { isAdmin } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -118,8 +120,12 @@ async function runHealthTests(): Promise<HealthTestResult[]> {
 
 export async function GET(request: NextRequest) {
   try {
-    // Health report is publicly accessible (no auth required)
-    // All sensitive data is sanitized before being returned
+    // Require admin authentication
+    const session = getSession(request);
+    if (!session || !isAdmin(session.refoldId)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const { searchParams } = new URL(request.url);
     const runTests = searchParams.get("test") === "true";
 
@@ -147,7 +153,7 @@ export async function GET(request: NextRequest) {
       supabaseUrl: maskSupabaseUrl(supabaseUrl),
       environment: process.env.NODE_ENV || "unknown",
       nodeVersion: process.version,
-      nextVersion: "14.1.0",
+      nextVersion: "14.2.35",
       supabaseClientVersion: "2.39.7",
     };
 
