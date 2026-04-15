@@ -4,7 +4,6 @@ import { useState } from "react";
 import {
   AudioLines,
   LogIn,
-  UserPlus,
   Upload,
   Library,
   Mic,
@@ -22,13 +21,7 @@ import { useAuth } from "@/lib/auth";
 export default function HomePage() {
   const { user, isLoading } = useAuth();
   const [authModalOpen, setAuthModalOpen] = useState(false);
-  const [authMode, setAuthMode] = useState<"login" | "register">("login");
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
-
-  const openAuthModal = (mode: "login" | "register") => {
-    setAuthMode(mode);
-    setAuthModalOpen(true);
-  };
 
   const handleUploadSuccess = () => {
     // Upload success handled by modal
@@ -76,22 +69,13 @@ export default function HomePage() {
             ) : user ? (
               <UserMenu />
             ) : (
-              <>
-                <button
-                  onClick={() => openAuthModal("login")}
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-                >
-                  <LogIn className="w-4 h-4" />
-                  Sign In
-                </button>
-                <button
-                  onClick={() => openAuthModal("register")}
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-                >
-                  <UserPlus className="w-4 h-4" />
-                  Sign Up
-                </button>
-              </>
+              <button
+                onClick={() => setAuthModalOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+              >
+                <LogIn className="w-4 h-4" />
+                Sign In
+              </button>
             )}
           </div>
         </div>
@@ -113,7 +97,7 @@ export default function HomePage() {
             {!user && (
               <div className="flex items-center justify-center gap-4">
                 <button
-                  onClick={() => openAuthModal("register")}
+                  onClick={() => setAuthModalOpen(true)}
                   className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 font-medium"
                 >
                   Chorus for Free!
@@ -287,19 +271,19 @@ export default function HomePage() {
                   <div className="grid md:grid-cols-3 gap-6">
                     <div className="text-center p-6 border border-gray-200 rounded-lg">
                       <div className="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center mx-auto mb-4">
-                        <UserPlus className="w-6 h-6 text-indigo-600" />
+                        <LogIn className="w-6 h-6 text-indigo-600" />
                       </div>
                       <h3 className="font-semibold text-gray-900 mb-2">
-                        1. Sign Up
+                        1. Sign In
                       </h3>
                       <p className="text-gray-600 text-sm mb-4">
-                        Create your free account to get started
+                        Sign in with your Refold account to get started
                       </p>
                       <button
-                        onClick={() => openAuthModal("register")}
+                        onClick={() => setAuthModalOpen(true)}
                         className="w-full px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm"
                       >
-                        Create Account
+                        Sign In
                       </button>
                     </div>
 
@@ -338,7 +322,6 @@ export default function HomePage() {
       <AuthModal
         isOpen={authModalOpen}
         onClose={() => setAuthModalOpen(false)}
-        initialMode={authMode}
       />
 
       {user && (

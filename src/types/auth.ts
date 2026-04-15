@@ -10,28 +10,6 @@ export interface User {
   isAdmin?: boolean;
 }
 
-/**
- * @deprecated SSO replaces email/password login. Kept temporarily for
- * backward compatibility with LoginForm (will be removed when
- * the frontend auth forms are replaced).
- */
-export interface LoginCredentials {
-  email: string;
-  password: string;
-}
-
-/**
- * @deprecated SSO replaces email/password registration. Kept temporarily for
- * backward compatibility with RegisterForm (will be removed when
- * the frontend auth forms are replaced).
- */
-export interface RegisterCredentials {
-  email: string;
-  username: string;
-  password: string;
-  confirmPassword: string;
-}
-
 export interface AuthState {
   user: User | null;
   isLoading: boolean;

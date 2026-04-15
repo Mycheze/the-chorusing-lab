@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, Suspense } from "react";
-import { AudioLines, LogIn, UserPlus, Upload, Scissors } from "lucide-react";
+import { AudioLines, LogIn, Upload, Scissors } from "lucide-react";
 import Link from "next/link";
 import { AuthModal } from "@/components/auth/AuthModal";
 import { UserMenu } from "@/components/auth/UserMenu";
@@ -12,14 +12,8 @@ import { useAuth } from "@/lib/auth";
 export default function LibraryPage() {
   const { user, isLoading } = useAuth();
   const [authModalOpen, setAuthModalOpen] = useState(false);
-  const [authMode, setAuthMode] = useState<"login" | "register">("login");
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [refreshBrowser, setRefreshBrowser] = useState(0);
-
-  const openAuthModal = (mode: "login" | "register") => {
-    setAuthMode(mode);
-    setAuthModalOpen(true);
-  };
 
   const handleUploadSuccess = () => {
     setRefreshBrowser((prev) => prev + 1);
@@ -62,22 +56,13 @@ export default function LibraryPage() {
             ) : user ? (
               <UserMenu />
             ) : (
-              <>
-                <button
-                  onClick={() => openAuthModal("login")}
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-                >
-                  <LogIn className="w-4 h-4" />
-                  Sign In
-                </button>
-                <button
-                  onClick={() => openAuthModal("register")}
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-                >
-                  <UserPlus className="w-4 h-4" />
-                  Sign Up
-                </button>
-              </>
+              <button
+                onClick={() => setAuthModalOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+              >
+                <LogIn className="w-4 h-4" />
+                Sign In
+              </button>
             )}
           </div>
         </div>
@@ -104,7 +89,6 @@ export default function LibraryPage() {
       <AuthModal
         isOpen={authModalOpen}
         onClose={() => setAuthModalOpen(false)}
-        initialMode={authMode}
       />
 
       {user && (
