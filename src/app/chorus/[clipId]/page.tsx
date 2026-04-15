@@ -204,7 +204,7 @@ export default function ChorusPage() {
               {/* Clip Info Card */}
               <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
                 <div className="flex items-start justify-between gap-6 mb-4">
-                  <div className="flex-1">
+                  <div className="flex-1 min-w-0">
                     <h2 className="text-xl font-bold text-gray-900 truncate" title={clip.title}>
                       {clip.title}
                     </h2>
