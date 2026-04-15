@@ -104,7 +104,7 @@ export async function GET(request: NextRequest) {
     // If a row with this refold_id already exists it gets updated;
     // otherwise a new row is inserted. This eliminates the read-then-write
     // race condition.
-    const { data: upserted } = await db
+    const { data: upserted, error: upsertError } = await db
       .from("profiles")
       .upsert(
         {
@@ -118,9 +118,15 @@ export async function GET(request: NextRequest) {
       .select("*")
       .single();
 
+    if (upsertError) {
+      console.error("Profile upsert error:", upsertError);
+      return NextResponse.redirect(`${appUrl}/?error=profile_creation_failed`);
+    }
+
     const profile: ProfileRecord | null = upserted as ProfileRecord | null;
 
     if (!profile) {
+      console.error("Profile upsert returned no data and no error");
       return NextResponse.redirect(`${appUrl}/?error=profile_creation_failed`);
     }
 
