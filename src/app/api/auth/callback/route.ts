@@ -100,33 +100,68 @@ export async function GET(request: NextRequest) {
     const username = name || `user_${refoldId}`;
     const db = getSupabaseServer();
 
-    // Atomic find-or-create via upsert on refold_id (unique constraint).
-    // If a row with this refold_id already exists it gets updated;
-    // otherwise a new row is inserted. This eliminates the read-then-write
-    // race condition.
-    const { data: upserted, error: upsertError } = await db
+    // Strategy:
+    // 1. Try to find existing profile by refold_id (returning user)
+    // 2. If not found, try to find by email (existing user's first SSO login)
+    //    and link their refold_id
+    // 3. If neither found, create a new profile
+
+    let profile: ProfileRecord | null = null;
+
+    // Step 1: Check if this refold_id is already linked
+    const { data: byRefoldId } = await db
       .from("profiles")
-      .upsert(
-        {
-          id: crypto.randomUUID(), // ignored on conflict (existing id kept)
-          refold_id: refoldId,
-          email,
-          username,
-        },
-        { onConflict: "refold_id", ignoreDuplicates: false }
-      )
       .select("*")
+      .eq("refold_id", refoldId)
       .single();
 
-    if (upsertError) {
-      console.error("Profile upsert error:", upsertError);
-      return NextResponse.redirect(`${appUrl}/?error=profile_creation_failed`);
+    if (byRefoldId) {
+      profile = byRefoldId as ProfileRecord;
+    } else {
+      // Step 2: Check if there's an existing profile with this email
+      const { data: byEmail } = await db
+        .from("profiles")
+        .select("*")
+        .eq("email", email)
+        .single();
+
+      if (byEmail) {
+        // Link the existing profile to this refold_id
+        const { data: updated, error: updateError } = await db
+          .from("profiles")
+          .update({ refold_id: refoldId })
+          .eq("id", byEmail.id)
+          .select("*")
+          .single();
+
+        if (updateError) {
+          console.error("Profile link error:", updateError);
+          return NextResponse.redirect(`${appUrl}/?error=profile_creation_failed`);
+        }
+        profile = updated as ProfileRecord;
+      } else {
+        // Step 3: Brand new user — create profile
+        const { data: created, error: createError } = await db
+          .from("profiles")
+          .insert({
+            id: crypto.randomUUID(),
+            refold_id: refoldId,
+            email,
+            username,
+          })
+          .select("*")
+          .single();
+
+        if (createError) {
+          console.error("Profile creation error:", createError);
+          return NextResponse.redirect(`${appUrl}/?error=profile_creation_failed`);
+        }
+        profile = created as ProfileRecord;
+      }
     }
 
-    const profile: ProfileRecord | null = upserted as ProfileRecord | null;
-
     if (!profile) {
-      console.error("Profile upsert returned no data and no error");
+      console.error("Profile lookup/creation returned no data");
       return NextResponse.redirect(`${appUrl}/?error=profile_creation_failed`);
     }
 
