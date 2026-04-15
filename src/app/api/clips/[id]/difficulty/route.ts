@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { serverDb } from "@/lib/server-database";
-import { verifyAccessToken } from "@/lib/supabase";
+import { getSession } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -10,24 +10,17 @@ export async function POST(
 ) {
   try {
     const { id } = params;
-    const authHeader = request.headers.get("Authorization");
 
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    // Authenticate via session cookie
+    const session = getSession(request);
+    if (!session) {
       return NextResponse.json(
         { error: "Authentication required" },
         { status: 401 }
       );
     }
 
-    const accessToken = authHeader.substring(7);
-    const { user, error: authError } = await verifyAccessToken(accessToken);
-
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: "Invalid authentication" },
-        { status: 401 }
-      );
-    }
+    const userId = session.userId;
 
     const body = await request.json();
     const { rating } = body;
@@ -39,10 +32,10 @@ export async function POST(
       );
     }
 
-    await serverDb.rateClipDifficulty(id, user.id, rating, accessToken);
+    await serverDb.rateClipDifficulty(id, userId, rating);
 
     // Get updated rating stats
-    const ratingStats = await serverDb.getClipDifficultyRating(id, accessToken);
+    const ratingStats = await serverDb.getClipDifficultyRating(id, userId);
 
     return NextResponse.json({
       success: true,
@@ -64,29 +57,22 @@ export async function DELETE(
 ) {
   try {
     const { id } = params;
-    const authHeader = request.headers.get("Authorization");
 
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    // Authenticate via session cookie
+    const session = getSession(request);
+    if (!session) {
       return NextResponse.json(
         { error: "Authentication required" },
         { status: 401 }
       );
     }
 
-    const accessToken = authHeader.substring(7);
-    const { user, error: authError } = await verifyAccessToken(accessToken);
+    const userId = session.userId;
 
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: "Invalid authentication" },
-        { status: 401 }
-      );
-    }
-
-    await serverDb.removeDifficultyRating(id, user.id, accessToken);
+    await serverDb.removeDifficultyRating(id, userId);
 
     // Get updated rating stats
-    const ratingStats = await serverDb.getClipDifficultyRating(id, accessToken);
+    const ratingStats = await serverDb.getClipDifficultyRating(id, userId);
 
     return NextResponse.json({
       success: true,

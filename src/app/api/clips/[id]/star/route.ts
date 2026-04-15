@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { serverDb } from '@/lib/server-database';
-import { verifyAccessToken } from '@/lib/supabase';
+import { getSession } from '@/lib/session';
 
 export async function POST(
   request: NextRequest,
@@ -8,37 +8,20 @@ export async function POST(
 ) {
   try {
     const { id } = params;
-    // Get user from auth header
-    let userId: string | null = null;
-    let accessToken: string | null = null;
-    const authHeader = request.headers.get('Authorization');
-    
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      accessToken = authHeader.substring(7);
-      
-      // Verify token using standard client (no custom storage)
-      const { user, error: authError } = await verifyAccessToken(accessToken);
-      
-      if (authError) {
-        console.error("❌ Token verification failed:", authError.message);
-        return NextResponse.json(
-          { error: "Invalid authentication" },
-          { status: 401 }
-        );
-      }
-      
-      if (user) userId = user.id;
-    }
-    
-    if (!userId || !accessToken) {
+
+    // Authenticate via session cookie
+    const session = getSession(request);
+    if (!session) {
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }
       );
     }
 
-    const success = await serverDb.starClip(id, userId, accessToken);
-    
+    const userId = session.userId;
+
+    const success = await serverDb.starClip(id, userId);
+
     if (success) {
       return NextResponse.json({ success: true, message: 'Clip starred' });
     } else {
@@ -59,37 +42,20 @@ export async function DELETE(
 ) {
   try {
     const { id } = params;
-    // Get user from auth header
-    let userId: string | null = null;
-    let accessToken: string | null = null;
-    const authHeader = request.headers.get('Authorization');
-    
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      accessToken = authHeader.substring(7);
-      
-      // Verify token using standard client (no custom storage)
-      const { user, error: authError } = await verifyAccessToken(accessToken);
-      
-      if (authError) {
-        console.error("❌ Token verification failed:", authError.message);
-        return NextResponse.json(
-          { error: "Invalid authentication" },
-          { status: 401 }
-        );
-      }
-      
-      if (user) userId = user.id;
-    }
-    
-    if (!userId || !accessToken) {
+
+    // Authenticate via session cookie
+    const session = getSession(request);
+    if (!session) {
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }
       );
     }
 
-    const success = await serverDb.unstarClip(id, userId, accessToken);
-    
+    const userId = session.userId;
+
+    const success = await serverDb.unstarClip(id, userId);
+
     if (success) {
       return NextResponse.json({ success: true, message: 'Clip unstarred' });
     } else {

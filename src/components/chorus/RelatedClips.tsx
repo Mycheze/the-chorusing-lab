@@ -5,8 +5,6 @@ import { Clock, User, Star, Zap, Loader2, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 import type { AudioClip } from "@/types/audio";
-import { createClient } from "@supabase/supabase-js";
-import type { Database } from "@/types/supabase";
 
 interface RelatedClipsProps {
   currentClip: AudioClip & {
@@ -23,7 +21,7 @@ interface ClipWithStarInfo extends AudioClip {
 }
 
 export function RelatedClips({ currentClip }: RelatedClipsProps) {
-  const { user, getAuthHeaders } = useAuth();
+  const { user } = useAuth();
   const [relatedClips, setRelatedClips] = useState<ClipWithStarInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -48,13 +46,7 @@ export function RelatedClips({ currentClip }: RelatedClipsProps) {
         // Limit to 10 clips
         params.append("limit", "10");
 
-        const headers: HeadersInit = {
-          ...getAuthHeaders(),
-        };
-
-        const response = await fetch(`/api/clips?${params.toString()}`, {
-          headers,
-        });
+        const response = await fetch(`/api/clips?${params.toString()}`);
 
         if (!response.ok) {
           throw new Error("Failed to fetch related clips");
@@ -81,7 +73,7 @@ export function RelatedClips({ currentClip }: RelatedClipsProps) {
     };
 
     fetchRelatedClips();
-  }, [currentClip, user, getAuthHeaders]);
+  }, [currentClip, user]);
 
   const formatDuration = (seconds: number) => {
     if (seconds < 60) return `${Math.round(seconds)}s`;

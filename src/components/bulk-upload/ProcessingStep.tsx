@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { CheckCircle, AlertCircle, Loader2, ExternalLink, ArrowRight } from 'lucide-react';
-import { useAuth } from '@/lib/auth';
 import type { CSVRow } from '@/lib/bulk-upload/csv-parser';
 import type { FileMatch } from '@/lib/bulk-upload/file-matcher';
 import type { AudioClip } from '@/types/audio';
@@ -31,7 +30,6 @@ export function ProcessingStep({
   onComplete,
   onBack,
 }: ProcessingStepProps) {
-  const { getAuthHeaders } = useAuth();
   const [processingStates, setProcessingStates] = useState<ClipProcessingState[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [completedCount, setCompletedCount] = useState(0);
@@ -115,9 +113,6 @@ export function ProcessingStep({
 
       const response = await fetch('/api/bulk-upload/process', {
         method: 'POST',
-        headers: {
-          ...getAuthHeaders(),
-        },
         body: formData,
       });
 

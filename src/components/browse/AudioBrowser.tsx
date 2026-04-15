@@ -48,7 +48,7 @@ interface ClipWithStarInfo extends AudioClip {
 }
 
 export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
-  const { user, getAuthHeaders } = useAuth();
+  const { user } = useAuth();
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -195,11 +195,9 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
     // Debounce save (1.5 seconds, matching search term debounce)
     const timeoutId = setTimeout(async () => {
       try {
-        const headers = getAuthHeaders();
         const response = await fetch("/api/user/preferences", {
           method: "PUT",
           headers: {
-            ...headers,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
@@ -228,7 +226,7 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
     }, 1500);
 
     return () => clearTimeout(timeoutId);
-  }, [filters.language, filters.speakerGender, filters.speakerAgeRange, filters.speakerDialect, filters.speedFilter, sort, user, getAuthHeaders]);
+  }, [filters.language, filters.speakerGender, filters.speakerAgeRange, filters.speakerDialect, filters.speedFilter, sort, user]);
 
   // Fetch available dialects when language changes
   useEffect(() => {
@@ -329,10 +327,7 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
         searchParams?.get("sortField");
 
       try {
-        const headers = getAuthHeaders();
-        const response = await fetch("/api/user/preferences", {
-          headers,
-        });
+        const response = await fetch("/api/user/preferences");
 
         if (response.ok) {
           const data = await response.json();
@@ -414,7 +409,7 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
     };
 
     loadPreferences();
-  }, [user, searchParams, getAuthHeaders, updateURL, searchTerm]);
+  }, [user, searchParams, updateURL, searchTerm]);
 
   const fetchClips = useCallback(async (isFilterChange: boolean = false, retryCount = 0) => {
     // Only set loading: true on initial load, not when filters change
@@ -450,17 +445,12 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
       params.append("sortField", sort.field);
       params.append("sortDirection", sort.direction);
 
-      const headers: HeadersInit = {
-        ...getAuthHeaders(),
-      };
-
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
 
       let response: Response;
       try {
         response = await fetch(`/api/clips?${params.toString()}`, {
-          headers,
           signal: controller.signal,
         });
         clearTimeout(timeoutId);
@@ -528,7 +518,7 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
         setLoading(false);
       }
     }
-  }, [filters, sort, showStarred, showMyUploads, getAuthHeaders, clips.length]);
+  }, [filters, sort, showStarred, showMyUploads, clips.length]);
 
   // Initial load - wait for preferences to load AND be applied first, then fetch with correct filters
   useEffect(() => {
@@ -690,9 +680,6 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
       const method = isStarred ? "DELETE" : "POST";
       const response = await fetch(`/api/clips/${clipId}/star`, {
         method,
-        headers: {
-          ...getAuthHeaders(),
-        },
       });
 
       if (response.ok) {
@@ -731,9 +718,6 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
     try {
       const response = await fetch(`/api/clips/${deletingClip.id}`, {
         method: "DELETE",
-        headers: {
-          ...getAuthHeaders(),
-        },
       });
 
       if (response.ok) {

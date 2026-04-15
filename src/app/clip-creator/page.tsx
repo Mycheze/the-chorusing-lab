@@ -10,7 +10,6 @@ import {
   AudioLines,
   Library,
   LogIn,
-  UserPlus,
 } from "lucide-react";
 import Link from "next/link";
 import { AudioEditor } from "@/components/audio/AudioEditor";
@@ -20,19 +19,13 @@ import { UploadModal } from "@/components/upload/UploadModal";
 import { useAuth } from "@/lib/auth";
 
 export default function ClipCreatorPage() {
-  const { user, isLoading, getAuthHeaders } = useAuth();
+  const { user, isLoading } = useAuth();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [sourceUrl, setSourceUrl] = useState<string>("");
   const [fileError, setFileError] = useState<string | null>(null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
-  const [authMode, setAuthMode] = useState<"login" | "register">("login");
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-
-  const openAuthModal = (mode: "login" | "register") => {
-    setAuthMode(mode);
-    setAuthModalOpen(true);
-  };
 
   const processFile = (file: File) => {
     // Validate file
@@ -179,22 +172,13 @@ export default function ClipCreatorPage() {
             ) : user ? (
               <UserMenu />
             ) : (
-              <>
-                <button
-                  onClick={() => openAuthModal("login")}
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-                >
-                  <LogIn className="w-4 h-4" />
-                  Sign In
-                </button>
-                <button
-                  onClick={() => openAuthModal("register")}
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-                >
-                  <UserPlus className="w-4 h-4" />
-                  Sign Up
-                </button>
-              </>
+              <button
+                onClick={() => setAuthModalOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+              >
+                <LogIn className="w-4 h-4" />
+                Sign In
+              </button>
             )}
           </div>
         </div>
@@ -377,7 +361,6 @@ export default function ClipCreatorPage() {
       <AuthModal
         isOpen={authModalOpen}
         onClose={() => setAuthModalOpen(false)}
-        initialMode={authMode}
       />
 
       {user && (

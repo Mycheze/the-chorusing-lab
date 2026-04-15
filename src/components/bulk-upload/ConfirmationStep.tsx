@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { CheckCircle, Trash2, ExternalLink, Library, AlertCircle } from 'lucide-react';
-import { useAuth } from '@/lib/auth';
 import Link from 'next/link';
 import type { AudioClip } from '@/types/audio';
 
@@ -12,7 +11,6 @@ interface ConfirmationStepProps {
 }
 
 export function ConfirmationStep({ clips, onDelete }: ConfirmationStepProps) {
-  const { getAuthHeaders } = useAuth();
   const [selectedClips, setSelectedClips] = useState<Set<string>>(new Set());
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -48,7 +46,6 @@ export function ConfirmationStep({ clips, onDelete }: ConfirmationStepProps) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...getAuthHeaders(),
         },
         body: JSON.stringify({
           clipIds: Array.from(selectedClips),

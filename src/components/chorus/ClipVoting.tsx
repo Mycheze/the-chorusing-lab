@@ -21,7 +21,7 @@ export function ClipVoting({
   userVote: initialUserVote,
   onVoteUpdate,
 }: ClipVotingProps) {
-  const { user, getAuthHeaders } = useAuth();
+  const { user } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentUpvotes, setCurrentUpvotes] = useState(initialUpvoteCount);
   const [currentDownvotes, setCurrentDownvotes] = useState(initialDownvoteCount);
@@ -43,7 +43,6 @@ export function ClipVoting({
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...getAuthHeaders(),
         },
         body: JSON.stringify({ voteType }),
       });
@@ -75,7 +74,6 @@ export function ClipVoting({
     try {
       const response = await fetch(`/api/clips/${clipId}/vote`, {
         method: "DELETE",
-        headers: getAuthHeaders(),
       });
 
       if (!response.ok) {
