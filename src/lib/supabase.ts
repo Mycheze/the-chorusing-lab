@@ -43,27 +43,43 @@ const serviceRoleClientId = supabaseMonitor.registerClient('service-role');
  * Falls back to the anon key when SUPABASE_SERVICE_ROLE_KEY is not set
  * (e.g. in local development without the key configured).
  */
+let _supabaseService: ReturnType<typeof createClient<Database>> | null = null;
+
+/**
+ * Returns a Supabase client authenticated with the service role key.
+ * Falls back to the anon key when SUPABASE_SERVICE_ROLE_KEY is not set
+ * (e.g. in local development without the key configured).
+ * Lazy-initialized to avoid throwing during Next.js build.
+ */
 export function getServiceClient() {
-  if (process.env.NODE_ENV === "production" && !supabaseServiceRoleKey) {
+  if (_supabaseService) return _supabaseService;
+
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (process.env.NODE_ENV === "production" && !serviceKey) {
     throw new Error("SUPABASE_SERVICE_ROLE_KEY is required in production");
   }
-  const key = supabaseServiceRoleKey || SUPABASE_ANON_KEY;
-  if (!supabaseServiceRoleKey) {
+  const key = serviceKey || SUPABASE_ANON_KEY;
+  if (!serviceKey) {
     console.warn(
       "SUPABASE_SERVICE_ROLE_KEY not set -- falling back to anon key. " +
         "Server-side writes will fail if RLS is still enabled."
     );
   }
-  return createClient<Database>(SUPABASE_URL, key, {
+  _supabaseService = createClient<Database>(SUPABASE_URL, key, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
     },
   });
+  return _supabaseService;
 }
 
-// Singleton service client -- created once per process
-export const supabaseService = getServiceClient();
+// Lazy singleton — use this instead of calling getServiceClient() directly
+export const supabaseService = new Proxy({} as ReturnType<typeof createClient<Database>>, {
+  get(_, prop) {
+    return (getServiceClient() as any)[prop];
+  },
+});
 
 // ---------------------------------------------------------------------------
 // Storage helpers
