@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { ChevronDown, Search } from "lucide-react";
 
 interface LanguageSelectorProps {
@@ -8,6 +8,7 @@ interface LanguageSelectorProps {
   onChange: (language: string) => void;
   required?: boolean;
   className?: string;
+  clipCounts?: Record<string, number>;
 }
 
 // Comprehensive language list with English and native names
@@ -84,6 +85,7 @@ export function LanguageSelector({
   onChange,
   required = false,
   className = "",
+  clipCounts,
 }: LanguageSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -91,8 +93,23 @@ export function LanguageSelector({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
+  // Sort languages: those with clips first (by count desc), then rest alphabetically
+  const sortedLanguages = useMemo(() => {
+    if (!clipCounts) return LANGUAGES;
+
+    const withClips = LANGUAGES
+      .filter((lang) => (clipCounts[lang.name] || 0) > 0)
+      .sort((a, b) => (clipCounts[b.name] || 0) - (clipCounts[a.name] || 0));
+
+    const withoutClips = LANGUAGES
+      .filter((lang) => !(clipCounts[lang.name] || 0))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    return [...withClips, ...withoutClips];
+  }, [clipCounts]);
+
   // Filter languages based on search term
-  const filteredLanguages = LANGUAGES.filter(
+  const filteredLanguages = sortedLanguages.filter(
     (lang) =>
       lang.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       lang.native.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -241,7 +258,14 @@ export function LanguageSelector({
                   aria-selected={selectedLanguage?.code === language.code}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="font-medium">{language.name}</span>
+                    <span className="font-medium">
+                      {language.name}
+                      {clipCounts && clipCounts[language.name] ? (
+                        <span className="text-gray-400 font-normal ml-1">
+                          ({clipCounts[language.name]})
+                        </span>
+                      ) : null}
+                    </span>
                     <span className="text-gray-500 text-xs">
                       {language.native}
                     </span>
