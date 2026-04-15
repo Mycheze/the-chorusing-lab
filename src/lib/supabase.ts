@@ -23,7 +23,7 @@ const SUPABASE_URL: string = supabaseUrl;
 const SUPABASE_ANON_KEY: string = supabaseAnonKey;
 
 // Track client instances
-const anonClientId = supabaseMonitor.registerClient('anonymous');
+supabaseMonitor.registerClient('anonymous');
 
 // Public / anon client for client-side read-only operations
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -36,7 +36,7 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, 
 // ---------------------------------------------------------------------------
 // Service-role client for server-side operations (bypasses RLS)
 // ---------------------------------------------------------------------------
-const serviceRoleClientId = supabaseMonitor.registerClient('service-role');
+supabaseMonitor.registerClient('service-role');
 
 /**
  * Returns a Supabase client authenticated with the service role key.

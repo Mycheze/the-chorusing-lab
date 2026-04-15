@@ -17,6 +17,7 @@ import { UserMenu } from "@/components/auth/UserMenu";
 import { AuthModal } from "@/components/auth/AuthModal";
 import { UploadModal } from "@/components/upload/UploadModal";
 import { useAuth } from "@/lib/auth";
+import { supportedFormats } from "@/lib/audio/config";
 
 export default function ClipCreatorPage() {
   const { user, isLoading } = useAuth();
@@ -29,8 +30,6 @@ export default function ClipCreatorPage() {
 
   const processFile = (file: File) => {
     // Validate file
-    const supportedFormats = ["mp3", "wav", "m4a", "ogg", "webm"];
-
     const extension = file.name.split(".").pop()?.toLowerCase();
 
     if (!extension || !supportedFormats.includes(extension)) {

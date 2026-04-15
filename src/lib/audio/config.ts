@@ -11,24 +11,6 @@ export const defaultWaveformConfig: WaveformConfig = {
   normalize: true,
 };
 
-export const waveformThemes = {
-  default: defaultWaveformConfig,
-  dark: {
-    ...defaultWaveformConfig,
-    waveColor: '#374151', // gray-700
-    progressColor: '#6366f1', // indigo-500
-    cursorColor: '#f3f4f6', // gray-100
-    backgroundColor: '#111827', // gray-900
-  },
-  minimal: {
-    ...defaultWaveformConfig,
-    height: 96,
-    waveColor: '#d1d5db', // gray-300
-    progressColor: '#059669', // emerald-600
-    cursorColor: '#065f46', // emerald-800
-  }
-};
-
 // WaveSurfer.js specific configuration
 export const createWaveSurferConfig = (container: HTMLDivElement) => ({
   container,
@@ -48,20 +30,5 @@ export const createWaveSurferConfig = (container: HTMLDivElement) => ({
   pixelRatio: typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 2) : 1,
 });
 
-// Demo audio URLs for testing
-export const demoAudioUrls = {
-  bell: 'https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3',
-  sample: 'https://www.learningcontainer.com/wp-content/uploads/2020/02/Kalimba.mp3',
-};
-
 // Audio format support
 export const supportedFormats = ['mp3', 'wav', 'm4a', 'ogg', 'webm'];
-
-// Optimized settings for chorusing
-export const chorusingDefaults = {
-  minPxPerSec: 50, // Good granularity for short clips
-  maxCanvasWidth: 4000, // Prevent performance issues
-  fillParent: true,
-  scrollParent: true,
-  autoCenter: true,
-};

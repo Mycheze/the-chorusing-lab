@@ -5,8 +5,6 @@ export interface User {
   refoldId?: number; // Refold SSO user ID (profiles.refold_id)
   username: string;
   email: string;
-  /** @deprecated Not included in SSO session. Kept for server-database.ts compatibility. */
-  createdAt?: string;
   isAdmin?: boolean;
 }
 
@@ -20,5 +18,5 @@ export interface AuthContextType extends AuthState {
   isAuthenticated: boolean;
   login: (credentials?: any) => void;
   register: (credentials?: any) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
 }

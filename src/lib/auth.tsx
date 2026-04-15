@@ -71,8 +71,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.location.href = "/api/auth/sso";
   }, []);
 
-  const logout = useCallback(() => {
-    window.location.href = "/api/auth/logout";
+  const logout = useCallback(async () => {
+    await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+    window.location.href = "/";
   }, []);
 
   const isAuthenticated = user !== null;

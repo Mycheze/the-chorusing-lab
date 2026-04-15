@@ -10,8 +10,14 @@ interface AuthModalProps {
 
 export function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const { login } = useAuth();
+  const isDev = process.env.NODE_ENV === 'development';
 
   if (!isOpen) return null;
+
+  const handleDevLogin = async () => {
+    await fetch('/api/auth/dev-login', { method: 'POST', credentials: 'include' });
+    window.location.reload();
+  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -41,6 +47,14 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
             <LogIn className="w-5 h-5" />
             Log in with Refold
           </button>
+          {isDev && (
+            <button
+              onClick={handleDevLogin}
+              className="w-full mt-3 flex items-center justify-center gap-2 px-4 py-3 bg-gray-800 text-white rounded-md hover:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 font-medium"
+            >
+              Dev Admin Login
+            </button>
+          )}
         </div>
       </div>
     </div>

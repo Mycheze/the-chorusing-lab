@@ -17,7 +17,7 @@ import { supabaseMonitor } from "@/lib/supabase-monitor";
 import { retryWithBackoff, isTransientError } from "@/lib/api-utils";
 
 // Track server client instance
-const serverClientId = supabaseMonitor.registerClient('server');
+supabaseMonitor.registerClient('server');
 
 // All database operations use the service role client (RLS removed)
 const db = supabaseService;
@@ -30,6 +30,7 @@ class SupabaseDatabase {
     options: { retry?: boolean } = {}
   ): Promise<T> {
     const requestId = supabaseMonitor.startRequest('database', operation);
+    const startTime = Date.now();
     const timeoutMs = 30000; // 30 seconds
     const shouldRetry = options.retry !== false; // Default to true
 
@@ -57,7 +58,7 @@ class SupabaseDatabase {
           })
         : await executeOperation();
 
-      const duration = Date.now() - (supabaseMonitor as any).inFlightRequests.get(requestId)?.startTime || 0;
+      const duration = Date.now() - startTime;
       supabaseMonitor.completeRequest(requestId, {
         type: 'database',
         operation,
@@ -67,8 +68,7 @@ class SupabaseDatabase {
       });
       return result;
     } catch (error: any) {
-      const inFlight = (supabaseMonitor as any).inFlightRequests.get(requestId);
-      const duration = inFlight ? Date.now() - inFlight.startTime : 0;
+      const duration = Date.now() - startTime;
       const isTimeout = error?.message === 'Operation timeout';
 
       if (!isTimeout) {
@@ -84,6 +84,31 @@ class SupabaseDatabase {
       }
       throw error;
     }
+  }
+
+  // Get distinct dialects for a given language
+  async getDistinctDialects(language: string): Promise<string[]> {
+    return this.monitorDbOperation('getDistinctDialects', async () => {
+      const { data, error } = await db
+        .from("audio_clips")
+        .select("speaker_dialect")
+        .eq("language", language)
+        .not("speaker_dialect", "is", null);
+
+      if (error) {
+        throw new Error(`Failed to fetch dialects: ${error.message}`);
+      }
+
+      const dialects = Array.from(
+        new Set(
+          (data || [])
+            .map((row) => row.speaker_dialect)
+            .filter((dialect): dialect is string => !!dialect)
+        )
+      ).sort();
+
+      return dialects;
+    });
   }
 
   // Helper to check if a string is an email
@@ -125,7 +150,6 @@ class SupabaseDatabase {
         id: profile.id,
         username: profile.username,
         email: profile.email,
-        createdAt: profile.created_at,
       };
     });
   }
@@ -147,7 +171,6 @@ class SupabaseDatabase {
         id: profile.id,
         username: profile.username,
         email: profile.email,
-        createdAt: profile.created_at,
       };
     });
   }
@@ -168,7 +191,6 @@ class SupabaseDatabase {
         id: profile.id,
         username: profile.username,
         email: profile.email,
-        createdAt: profile.created_at,
       };
     });
   }
@@ -325,57 +347,59 @@ class SupabaseDatabase {
     userId: string,
     refoldId?: number
   ): Promise<boolean> {
-    // First get the clip to check ownership and get storage path
-    const { data: clip, error: fetchError } = await db
-      .from("audio_clips")
-      .select("uploaded_by, storage_path")
-      .eq("id", id)
-      .single();
+    return this.monitorDbOperation('deleteAudioClip', async () => {
+      // First get the clip to check ownership and get storage path
+      const { data: clip, error: fetchError } = await db
+        .from("audio_clips")
+        .select("uploaded_by, storage_path")
+        .eq("id", id)
+        .single();
 
-    if (fetchError || !clip) {
-      return false;
-    }
+      if (fetchError || !clip) {
+        return false;
+      }
 
-    // Check if user owns this clip or is an admin
-    const adminCheck = refoldId != null ? isAdmin(refoldId) : false;
-    if (clip.uploaded_by !== userId && !adminCheck) {
-      throw new Error("Unauthorized to delete this clip");
-    }
+      // Check if user owns this clip or is an admin
+      const adminCheck = refoldId != null ? isAdmin(refoldId) : false;
+      if (clip.uploaded_by !== userId && !adminCheck) {
+        throw new Error("Unauthorized to delete this clip");
+      }
 
-    // Delete from database
-    const { error: deleteError, data: deleteData } = await db
-      .from("audio_clips")
-      .delete()
-      .eq("id", id)
-      .select();
+      // Delete from database
+      const { error: deleteError, data: deleteData } = await db
+        .from("audio_clips")
+        .delete()
+        .eq("id", id)
+        .select();
 
-    if (deleteError) {
-      console.error("Delete clip database error:", deleteError);
-      console.error("Error details:", {
-        code: deleteError.code,
-        message: deleteError.message,
-        details: deleteError.details,
-        hint: deleteError.hint,
-      });
-      throw new Error(`Failed to delete clip: ${deleteError.message}`);
-    }
+      if (deleteError) {
+        console.error("Delete clip database error:", deleteError);
+        console.error("Error details:", {
+          code: deleteError.code,
+          message: deleteError.message,
+          details: deleteError.details,
+          hint: deleteError.hint,
+        });
+        throw new Error(`Failed to delete clip: ${deleteError.message}`);
+      }
 
-    // Check if anything was actually deleted
-    if (!deleteData || deleteData.length === 0) {
-      console.warn("Delete operation returned no deleted rows");
-      throw new Error(
-        "No rows were deleted - clip may not exist or you may not have permission"
-      );
-    }
+      // Check if anything was actually deleted
+      if (!deleteData || deleteData.length === 0) {
+        console.warn("Delete operation returned no deleted rows");
+        throw new Error(
+          "No rows were deleted - clip may not exist or you may not have permission"
+        );
+      }
 
-    // Delete file from storage (don't fail if file doesn't exist)
-    try {
-      await deleteAudioFile(clip.storage_path);
-    } catch (error) {
-      console.warn(`Could not delete file ${clip.storage_path}:`, error);
-    }
+      // Delete file from storage (don't fail if file doesn't exist)
+      try {
+        await deleteAudioFile(clip.storage_path);
+      } catch (error) {
+        console.warn(`Could not delete file ${clip.storage_path}:`, error);
+      }
 
-    return true;
+      return true;
+    });
   }
 
   async updateAudioClip(
@@ -384,84 +408,86 @@ class SupabaseDatabase {
     userId: string,
     refoldId?: number
   ): Promise<AudioClip | null> {
-    // First get the clip to check ownership
-    const { data: clip, error: fetchError } = await db
-      .from("audio_clips")
-      .select("uploaded_by")
-      .eq("id", id)
-      .single();
+    return this.monitorDbOperation('updateAudioClip', async () => {
+      // First get the clip to check ownership
+      const { data: clip, error: fetchError } = await db
+        .from("audio_clips")
+        .select("uploaded_by")
+        .eq("id", id)
+        .single();
 
-    if (fetchError || !clip) {
-      console.error("Failed to fetch clip for update:", fetchError);
-      return null;
-    }
+      if (fetchError || !clip) {
+        console.error("Failed to fetch clip for update:", fetchError);
+        return null;
+      }
 
-    // Check if user owns this clip or is an admin
-    const updateAdminCheck = refoldId != null ? isAdmin(refoldId) : false;
-    if (clip.uploaded_by !== userId && !updateAdminCheck) {
-      throw new Error("Unauthorized to update this clip");
-    }
+      // Check if user owns this clip or is an admin
+      const updateAdminCheck = refoldId != null ? isAdmin(refoldId) : false;
+      if (clip.uploaded_by !== userId && !updateAdminCheck) {
+        throw new Error("Unauthorized to update this clip");
+      }
 
-    // Convert updates to database format
-    const dbUpdates: any = {};
+      // Convert updates to database format
+      const dbUpdates: any = {};
 
-    if (updates.title) {
-      dbUpdates.title = updates.title;
-    }
+      if (updates.title) {
+        dbUpdates.title = updates.title;
+      }
 
-    if (updates.metadata) {
-      if (updates.metadata.language)
-        dbUpdates.language = updates.metadata.language;
-      if (updates.metadata.speakerGender !== undefined)
-        dbUpdates.speaker_gender = updates.metadata.speakerGender;
-      if (updates.metadata.speakerAgeRange !== undefined)
-        dbUpdates.speaker_age_range = updates.metadata.speakerAgeRange;
-      if (updates.metadata.speakerDialect !== undefined)
-        dbUpdates.speaker_dialect = updates.metadata.speakerDialect;
-      if (updates.metadata.transcript !== undefined)
-        dbUpdates.transcript = updates.metadata.transcript;
-      if (updates.metadata.sourceUrl !== undefined)
-        dbUpdates.source_url = updates.metadata.sourceUrl;
-      if (updates.metadata.tags !== undefined)
-        dbUpdates.tags = updates.metadata.tags;
-    }
+      if (updates.metadata) {
+        if (updates.metadata.language)
+          dbUpdates.language = updates.metadata.language;
+        if (updates.metadata.speakerGender !== undefined)
+          dbUpdates.speaker_gender = updates.metadata.speakerGender;
+        if (updates.metadata.speakerAgeRange !== undefined)
+          dbUpdates.speaker_age_range = updates.metadata.speakerAgeRange;
+        if (updates.metadata.speakerDialect !== undefined)
+          dbUpdates.speaker_dialect = updates.metadata.speakerDialect;
+        if (updates.metadata.transcript !== undefined)
+          dbUpdates.transcript = updates.metadata.transcript;
+        if (updates.metadata.sourceUrl !== undefined)
+          dbUpdates.source_url = updates.metadata.sourceUrl;
+        if (updates.metadata.tags !== undefined)
+          dbUpdates.tags = updates.metadata.tags;
+      }
 
-    const { data, error } = await db
-      .from("audio_clips")
-      .update(dbUpdates)
-      .eq("id", id)
-      .select()
-      .single();
+      const { data, error } = await db
+        .from("audio_clips")
+        .update(dbUpdates)
+        .eq("id", id)
+        .select()
+        .single();
 
-    if (error) {
-      console.error("Update clip database error:", error);
-      console.error("Error details:", {
-        code: error.code,
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-      });
-      return null;
-    }
+      if (error) {
+        console.error("Update clip database error:", error);
+        console.error("Error details:", {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+        });
+        return null;
+      }
 
-    if (!data) {
-      console.warn("Update clip returned no data");
-      return null;
-    }
+      if (!data) {
+        console.warn("Update clip returned no data");
+        return null;
+      }
 
-    const converted = convertAudioClipFromDb(data);
-    return {
-      id: converted.id,
-      title: converted.title,
-      duration: converted.duration,
-      filename: converted.filename,
-      originalFilename: converted.originalFilename,
-      fileSize: converted.fileSize,
-      metadata: converted.metadata,
-      uploadedBy: converted.uploadedBy,
-      createdAt: converted.createdAt,
-      updatedAt: converted.updatedAt,
-    };
+      const converted = convertAudioClipFromDb(data);
+      return {
+        id: converted.id,
+        title: converted.title,
+        duration: converted.duration,
+        filename: converted.filename,
+        originalFilename: converted.originalFilename,
+        fileSize: converted.fileSize,
+        metadata: converted.metadata,
+        uploadedBy: converted.uploadedBy,
+        createdAt: converted.createdAt,
+        updatedAt: converted.updatedAt,
+      };
+    });
   }
 
   // Star methods
@@ -469,77 +495,85 @@ class SupabaseDatabase {
     clipId: string,
     userId: string,
   ): Promise<boolean> {
-    const { error } = await db.from("clip_stars").insert({
-      clip_id: clipId,
-      user_id: userId,
-    });
+    return this.monitorDbOperation('starClip', async () => {
+      const { error } = await db.from("clip_stars").insert({
+        clip_id: clipId,
+        user_id: userId,
+      });
 
-    // Return false if already starred (unique constraint violation)
-    if (error) {
-      if (error.code === "23505") {
-        return false;
+      // Return false if already starred (unique constraint violation)
+      if (error) {
+        if (error.code === "23505") {
+          return false;
+        }
+        throw new Error(`Failed to star clip: ${error.message}`);
       }
-      throw new Error(`Failed to star clip: ${error.message}`);
-    }
 
-    return true;
+      return true;
+    }, { retry: false });
   }
 
   async unstarClip(
     clipId: string,
     userId: string,
   ): Promise<boolean> {
-    const { error } = await db
-      .from("clip_stars")
-      .delete()
-      .eq("clip_id", clipId)
-      .eq("user_id", userId);
+    return this.monitorDbOperation('unstarClip', async () => {
+      const { error } = await db
+        .from("clip_stars")
+        .delete()
+        .eq("clip_id", clipId)
+        .eq("user_id", userId);
 
-    if (error) {
-      throw new Error(`Failed to unstar clip: ${error.message}`);
-    }
+      if (error) {
+        throw new Error(`Failed to unstar clip: ${error.message}`);
+      }
 
-    return true;
+      return true;
+    });
   }
 
   async getClipStars(clipId: string): Promise<string[]> {
-    try {
-      const { data, error } = await db
-        .from("clip_stars")
-        .select("user_id")
-        .eq("clip_id", clipId);
+    return this.monitorDbOperation('getClipStars', async () => {
+      try {
+        const { data, error } = await db
+          .from("clip_stars")
+          .select("user_id")
+          .eq("clip_id", clipId);
 
-      if (error) {
-        if (error.message?.includes("fetch failed") || error.message?.includes("timeout") || error.message?.includes("ECONNREFUSED")) {
+        if (error) {
+          if (isTransientError(error)) {
+            console.warn(`Connection error getting stars for clip ${clipId}:`, error.message);
+            return [];
+          }
+          throw new Error(`Failed to get clip stars: ${error.message}`);
+        }
+
+        return data.map((star) => star.user_id);
+      } catch (error: any) {
+        if (isTransientError(error)) {
           console.warn(`Connection error getting stars for clip ${clipId}:`, error.message);
           return [];
         }
-        throw new Error(`Failed to get clip stars: ${error.message}`);
+        throw error;
       }
-
-      return data.map((star) => star.user_id);
-    } catch (error: any) {
-      if (error?.message?.includes("fetch failed") || error?.message?.includes("timeout") || error?.message?.includes("ECONNREFUSED") || error?.code === "UND_ERR_CONNECT_TIMEOUT") {
-        console.warn(`Connection error getting stars for clip ${clipId}:`, error.message);
-        return [];
-      }
-      throw error;
-    }
+    });
   }
 
   async getUserStarredClips(
     userId: string,
   ): Promise<string[]> {
-    const { data, error } = await db
-      .from("clip_stars")
-      .select("clip_id")
-      .eq("user_id", userId);
+    return this.monitorDbOperation('getUserStarredClips', async () => {
+      const { data, error } = await db
+        .from("clip_stars")
+        .select("clip_id")
+        .eq("user_id", userId);
 
-    if (error) {
-      throw new Error(`Failed to get user starred clips: ${error.message}`);
-    }
+      if (error) {
+        throw new Error(`Failed to get user starred clips: ${error.message}`);
+      }
 
-    return data.map((star) => star.clip_id);
+      return data.map((star) => star.clip_id);
+    });
   }
 
   // Batch methods for efficient querying
@@ -558,7 +592,7 @@ class SupabaseDatabase {
           .in("clip_id", clipIds);
 
         if (error) {
-          if (error.message?.includes("fetch failed") || error.message?.includes("timeout") || error.message?.includes("ECONNREFUSED")) {
+          if (isTransientError(error)) {
             console.warn(`Connection error getting stars batch:`, error.message);
             return new Map();
           }
@@ -580,7 +614,7 @@ class SupabaseDatabase {
 
         return starsMap;
       } catch (error: any) {
-        if (error?.message?.includes("fetch failed") || error?.message?.includes("timeout") || error?.message?.includes("ECONNREFUSED") || error?.code === "UND_ERR_CONNECT_TIMEOUT") {
+        if (isTransientError(error)) {
           console.warn(`Connection error getting stars batch:`, error.message);
           return new Map();
         }
@@ -679,7 +713,7 @@ class SupabaseDatabase {
           console.warn("clip_difficulty_ratings table does not exist. Migration may not have been run.");
           return { average: null, count: 0, userRating: null };
         }
-        if (error?.message?.includes("fetch failed") || error?.message?.includes("timeout") || error?.message?.includes("ECONNREFUSED") || error?.code === "UND_ERR_CONNECT_TIMEOUT") {
+        if (isTransientError(error)) {
           console.warn("Connection error getting difficulty rating:", error.message);
           return { average: null, count: 0, userRating: null };
         }
@@ -712,7 +746,7 @@ class SupabaseDatabase {
             }
             return defaultMap;
           }
-          if (error.message?.includes("fetch failed") || error.message?.includes("timeout") || error.message?.includes("ECONNREFUSED")) {
+          if (isTransientError(error)) {
             console.warn("Connection error getting difficulty ratings batch:", error.message);
             const defaultMap = new Map();
             for (const clipId of clipIds) {
@@ -765,7 +799,7 @@ class SupabaseDatabase {
           }
           return defaultMap;
         }
-        if (error?.message?.includes("fetch failed") || error?.message?.includes("timeout") || error?.message?.includes("ECONNREFUSED") || error?.code === "UND_ERR_CONNECT_TIMEOUT") {
+        if (isTransientError(error)) {
           console.warn("Connection error getting difficulty ratings batch:", error.message);
           const defaultMap = new Map();
           for (const clipId of clipIds) {
@@ -862,7 +896,7 @@ class SupabaseDatabase {
           console.warn("clip_votes table does not exist. Migration may not have been run.");
           return { upvoteCount: 0, downvoteCount: 0, voteScore: 0, userVote: null };
         }
-        if (error?.message?.includes("fetch failed") || error?.message?.includes("timeout") || error?.message?.includes("ECONNREFUSED") || error?.code === "UND_ERR_CONNECT_TIMEOUT") {
+        if (isTransientError(error)) {
           console.warn("Connection error getting votes:", error.message);
           return { upvoteCount: 0, downvoteCount: 0, voteScore: 0, userVote: null };
         }
@@ -895,7 +929,7 @@ class SupabaseDatabase {
             }
             return defaultMap;
           }
-          if (error.message?.includes("fetch failed") || error.message?.includes("timeout") || error.message?.includes("ECONNREFUSED")) {
+          if (isTransientError(error)) {
             console.warn("Connection error getting votes batch:", error.message);
             const defaultMap = new Map();
             for (const clipId of clipIds) {
@@ -946,7 +980,7 @@ class SupabaseDatabase {
           }
           return defaultMap;
         }
-        if (error?.message?.includes("fetch failed") || error?.message?.includes("timeout") || error?.message?.includes("ECONNREFUSED") || error?.code === "UND_ERR_CONNECT_TIMEOUT") {
+        if (isTransientError(error)) {
           console.warn("Connection error getting votes batch:", error.message);
           const defaultMap = new Map();
           for (const clipId of clipIds) {
@@ -994,132 +1028,136 @@ class SupabaseDatabase {
   async getUserFilterPreferences(
     userId: string,
   ): Promise<FilterPreferences | null> {
-    const { data, error } = await db
-      .from("profiles")
-      .select("filter_preferences")
-      .eq("id", userId)
-      .single();
+    return this.monitorDbOperation('getUserFilterPreferences', async () => {
+      const { data, error } = await db
+        .from("profiles")
+        .select("filter_preferences")
+        .eq("id", userId)
+        .single();
 
-    if (error) {
-      if (error.code === "PGRST116") {
-        return null;
-      }
-      if (error.message?.includes("does not exist") || error.message?.includes("column")) {
-        console.warn("filter_preferences column does not exist yet. Please run the database migration.");
-        return null;
-      }
-      throw new Error(`Failed to get user filter preferences: ${error.message}`);
-    }
-
-    if (!data || !data.filter_preferences) {
-      return null;
-    }
-
-    try {
-      const preferences = data.filter_preferences as any;
-      const result: FilterPreferences = {};
-      if (preferences.language && typeof preferences.language === "string") {
-        result.language = preferences.language;
-      }
-      if (
-        preferences.speakerGender &&
-        ["male", "female", "other"].includes(preferences.speakerGender)
-      ) {
-        result.speakerGender = preferences.speakerGender;
-      }
-      if (
-        preferences.speakerAgeRange &&
-        ["teen", "younger-adult", "adult", "senior"].includes(
-          preferences.speakerAgeRange
-        )
-      ) {
-        result.speakerAgeRange = preferences.speakerAgeRange;
-      }
-      if (
-        preferences.speakerDialect &&
-        typeof preferences.speakerDialect === "string"
-      ) {
-        result.speakerDialect = preferences.speakerDialect;
-      }
-      if (
-        preferences.speedFilter &&
-        ["slow", "medium", "fast"].includes(preferences.speedFilter)
-      ) {
-        result.speedFilter = preferences.speedFilter;
-      }
-      if (preferences.defaultSort && typeof preferences.defaultSort === "object") {
-        const sort = preferences.defaultSort;
-        if (
-          sort.field &&
-          typeof sort.field === "string" &&
-          sort.direction &&
-          ["asc", "desc"].includes(sort.direction)
-        ) {
-          result.defaultSort = {
-            field: sort.field as any,
-            direction: sort.direction,
-          };
+      if (error) {
+        if (error.code === "PGRST116") {
+          return null;
         }
+        if (error.message?.includes("does not exist") || error.message?.includes("column")) {
+          console.warn("filter_preferences column does not exist yet. Please run the database migration.");
+          return null;
+        }
+        throw new Error(`Failed to get user filter preferences: ${error.message}`);
       }
 
-      return Object.keys(result).length > 0 ? result : null;
-    } catch (parseError) {
-      console.error("Failed to parse filter preferences:", parseError);
-      return null;
-    }
+      if (!data || !data.filter_preferences) {
+        return null;
+      }
+
+      try {
+        const preferences = data.filter_preferences as any;
+        const result: FilterPreferences = {};
+        if (preferences.language && typeof preferences.language === "string") {
+          result.language = preferences.language;
+        }
+        if (
+          preferences.speakerGender &&
+          ["male", "female", "other"].includes(preferences.speakerGender)
+        ) {
+          result.speakerGender = preferences.speakerGender;
+        }
+        if (
+          preferences.speakerAgeRange &&
+          ["teen", "younger-adult", "adult", "senior"].includes(
+            preferences.speakerAgeRange
+          )
+        ) {
+          result.speakerAgeRange = preferences.speakerAgeRange;
+        }
+        if (
+          preferences.speakerDialect &&
+          typeof preferences.speakerDialect === "string"
+        ) {
+          result.speakerDialect = preferences.speakerDialect;
+        }
+        if (
+          preferences.speedFilter &&
+          ["slow", "medium", "fast"].includes(preferences.speedFilter)
+        ) {
+          result.speedFilter = preferences.speedFilter;
+        }
+        if (preferences.defaultSort && typeof preferences.defaultSort === "object") {
+          const sort = preferences.defaultSort;
+          if (
+            sort.field &&
+            typeof sort.field === "string" &&
+            sort.direction &&
+            ["asc", "desc"].includes(sort.direction)
+          ) {
+            result.defaultSort = {
+              field: sort.field as any,
+              direction: sort.direction,
+            };
+          }
+        }
+
+        return Object.keys(result).length > 0 ? result : null;
+      } catch (parseError) {
+        console.error("Failed to parse filter preferences:", parseError);
+        return null;
+      }
+    });
   }
 
   async saveUserFilterPreferences(
     userId: string,
     preferences: FilterPreferences | null,
   ): Promise<void> {
-    if (!preferences) {
+    return this.monitorDbOperation('saveUserFilterPreferences', async () => {
+      if (!preferences) {
+        const { error } = await db
+          .from("profiles")
+          .update({ filter_preferences: null })
+          .eq("id", userId);
+
+        if (error) {
+          throw new Error(`Failed to save user filter preferences: ${error.message}`);
+        }
+        return;
+      }
+
+      const preferencesToSave: FilterPreferences = {};
+      if (preferences.language) {
+        preferencesToSave.language = preferences.language;
+      }
+      if (preferences.speakerGender) {
+        preferencesToSave.speakerGender = preferences.speakerGender;
+      }
+      if (preferences.speakerAgeRange) {
+        preferencesToSave.speakerAgeRange = preferences.speakerAgeRange;
+      }
+      if (preferences.speakerDialect) {
+        preferencesToSave.speakerDialect = preferences.speakerDialect;
+      }
+      if (preferences.speedFilter) {
+        preferencesToSave.speedFilter = preferences.speedFilter;
+      }
+      if (preferences.defaultSort) {
+        preferencesToSave.defaultSort = preferences.defaultSort;
+      }
+
+      const valueToSave =
+        Object.keys(preferencesToSave).length > 0 ? preferencesToSave : null;
+
       const { error } = await db
         .from("profiles")
-        .update({ filter_preferences: null })
+        .update({ filter_preferences: valueToSave as Json })
         .eq("id", userId);
 
       if (error) {
+        if (error.message?.includes("does not exist") || error.message?.includes("column")) {
+          console.warn("filter_preferences column does not exist yet. Please run the database migration.");
+          return;
+        }
         throw new Error(`Failed to save user filter preferences: ${error.message}`);
       }
-      return;
-    }
-
-    const preferencesToSave: FilterPreferences = {};
-    if (preferences.language) {
-      preferencesToSave.language = preferences.language;
-    }
-    if (preferences.speakerGender) {
-      preferencesToSave.speakerGender = preferences.speakerGender;
-    }
-    if (preferences.speakerAgeRange) {
-      preferencesToSave.speakerAgeRange = preferences.speakerAgeRange;
-    }
-    if (preferences.speakerDialect) {
-      preferencesToSave.speakerDialect = preferences.speakerDialect;
-    }
-    if (preferences.speedFilter) {
-      preferencesToSave.speedFilter = preferences.speedFilter;
-    }
-    if (preferences.defaultSort) {
-      preferencesToSave.defaultSort = preferences.defaultSort;
-    }
-
-    const valueToSave =
-      Object.keys(preferencesToSave).length > 0 ? preferencesToSave : null;
-
-    const { error } = await db
-      .from("profiles")
-      .update({ filter_preferences: valueToSave as Json })
-      .eq("id", userId);
-
-    if (error) {
-      if (error.message?.includes("does not exist") || error.message?.includes("column")) {
-        console.warn("filter_preferences column does not exist yet. Please run the database migration.");
-        return;
-      }
-      throw new Error(`Failed to save user filter preferences: ${error.message}`);
-    }
+    });
   }
 }
 
