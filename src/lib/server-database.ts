@@ -1,5 +1,5 @@
 // Server-side database layer using Supabase service role client (no RLS)
-import type { Database } from "@/types/supabase";
+import type { Database, Json } from "@/types/supabase";
 import type { User } from "@/types/auth";
 import type { AudioClip, AudioFilters, AudioSort, FilterPreferences } from "@/types/audio";
 import {
@@ -1110,7 +1110,7 @@ class SupabaseDatabase {
 
     const { error } = await db
       .from("profiles")
-      .update({ filter_preferences: valueToSave })
+      .update({ filter_preferences: valueToSave as Json })
       .eq("id", userId);
 
     if (error) {
