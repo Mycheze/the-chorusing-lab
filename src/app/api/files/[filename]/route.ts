@@ -25,8 +25,7 @@ export async function GET(
     }
 
     // Find the audio clip with this filename to get its storage path
-    const clips = await serverDb.getAudioClips();
-    const clip = clips.find(c => c.filename === filename);
+    const clip = await serverDb.getAudioClipByFilename(filename);
 
     if (!clip) {
       return NextResponse.json(
@@ -36,17 +35,7 @@ export async function GET(
     }
 
     // Get the public URL from Supabase
-    const storagePath = (clip as any).storagePath;
-    if (!storagePath) {
-      // Fallback: try to construct path from clip data
-      const constructedPath = `${clip.uploadedBy}/${clip.filename}`;
-      const publicUrl = getPublicUrl(constructedPath);
-
-      // Redirect to the Supabase public URL
-      return NextResponse.redirect(publicUrl);
-    }
-
-    const publicUrl = getPublicUrl(storagePath);
+    const publicUrl = getPublicUrl(clip.storagePath);
 
     // Redirect to the Supabase public URL
     return NextResponse.redirect(publicUrl);
