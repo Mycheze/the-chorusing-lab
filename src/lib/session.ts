@@ -87,8 +87,8 @@ export function verifySessionToken(token: string): SessionPayload | null {
 
     // Timing-safe signature comparison
     const expectedSignature = sign(`${encodedHeader}.${encodedPayload}`, secret);
-    const sigBuf = Buffer.from(encodedSignature);
-    const expectedBuf = Buffer.from(expectedSignature);
+    const sigBuf = base64UrlDecode(encodedSignature);
+    const expectedBuf = base64UrlDecode(expectedSignature);
     if (
       sigBuf.length !== expectedBuf.length ||
       !crypto.timingSafeEqual(sigBuf, expectedBuf)

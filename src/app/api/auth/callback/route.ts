@@ -23,9 +23,11 @@ interface ProfileRecord {
 
 function getSupabaseServer() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key =
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (process.env.NODE_ENV === "production" && !serviceRoleKey) {
+    throw new Error("SUPABASE_SERVICE_ROLE_KEY is required in production");
+  }
+  const key = serviceRoleKey || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !key) {
     throw new Error("Missing Supabase environment variables");
   }
@@ -98,67 +100,25 @@ export async function GET(request: NextRequest) {
     const username = name || `user_${refoldId}`;
     const db = getSupabaseServer();
 
-    let profile: ProfileRecord | null = null;
-
-    // 1. Look up by refold_id
-    const { data: byRefoldId } = await db
+    // Atomic find-or-create via upsert on refold_id (unique constraint).
+    // If a row with this refold_id already exists it gets updated;
+    // otherwise a new row is inserted. This eliminates the read-then-write
+    // race condition.
+    const { data: upserted } = await db
       .from("profiles")
+      .upsert(
+        {
+          id: crypto.randomUUID(), // ignored on conflict (existing id kept)
+          refold_id: refoldId,
+          email,
+          username,
+        },
+        { onConflict: "refold_id", ignoreDuplicates: false }
+      )
       .select("*")
-      .eq("refold_id", refoldId)
-      .maybeSingle();
+      .single();
 
-    if (byRefoldId) {
-      profile = byRefoldId as ProfileRecord;
-    }
-
-    if (!profile) {
-      // 2. Look up by email (case-insensitive)
-      const { data: byEmail } = await db
-        .from("profiles")
-        .select("*")
-        .ilike("email", email)
-        .maybeSingle();
-
-      const emailProfile = byEmail as ProfileRecord | null;
-
-      if (emailProfile) {
-        // 3. Found by email -- link refold_id
-        const { data: updated } = await db
-          .from("profiles")
-          .update({ refold_id: refoldId, email, username })
-          .eq("id", emailProfile.id)
-          .select("*")
-          .single();
-
-        profile = updated as ProfileRecord | null;
-      } else {
-        // 4. Create new profile
-        const { data: created } = await db
-          .from("profiles")
-          .insert({
-            id: crypto.randomUUID(),
-            refold_id: refoldId,
-            email,
-            username,
-          })
-          .select("*")
-          .single();
-
-        profile = created as ProfileRecord | null;
-      }
-    } else {
-      // 5. Always update email and username from SSO
-      const { data: updated } = await db
-        .from("profiles")
-        .update({ email, username })
-        .eq("id", profile.id)
-        .select("*")
-        .single();
-
-      if (updated) {
-        profile = updated as ProfileRecord;
-      }
-    }
+    const profile: ProfileRecord | null = upserted as ProfileRecord | null;
 
     if (!profile) {
       return NextResponse.redirect(`${appUrl}/?error=profile_creation_failed`);

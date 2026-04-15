@@ -44,6 +44,9 @@ const serviceRoleClientId = supabaseMonitor.registerClient('service-role');
  * (e.g. in local development without the key configured).
  */
 export function getServiceClient() {
+  if (process.env.NODE_ENV === "production" && !supabaseServiceRoleKey) {
+    throw new Error("SUPABASE_SERVICE_ROLE_KEY is required in production");
+  }
   const key = supabaseServiceRoleKey || SUPABASE_ANON_KEY;
   if (!supabaseServiceRoleKey) {
     console.warn(
