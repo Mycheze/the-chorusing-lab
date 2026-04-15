@@ -7,8 +7,6 @@ import { LanguageSelector } from "@/components/ui/LanguageSelector";
 import { AudioPlayer } from "@/components/audio/AudioPlayer";
 import Link from "next/link";
 import type { AudioMetadata } from "@/types/audio";
-import { createClient } from "@supabase/supabase-js";
-import type { Database } from "@/types/supabase";
 
 interface ClipExtractModalProps {
   isOpen: boolean;
@@ -91,7 +89,7 @@ export function ClipExtractModal({
   initialSourceUrl = "",
   onSuccess,
 }: ClipExtractModalProps) {
-  const { user, getAuthHeaders, isAuthenticated } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -362,9 +360,6 @@ export function ClipExtractModal({
 
       const response = await fetch("/api/upload", {
         method: "POST",
-        headers: {
-          ...getAuthHeaders(),
-        },
         body: uploadFormData,
       });
 

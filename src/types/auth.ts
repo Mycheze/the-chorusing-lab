@@ -21,5 +21,4 @@ export interface AuthContextType extends AuthState {
   login: (credentials?: any) => void;
   register: (credentials?: any) => Promise<void>;
   logout: () => void;
-  getAuthHeaders: () => HeadersInit;
 }

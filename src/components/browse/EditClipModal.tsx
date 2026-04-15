@@ -5,8 +5,6 @@ import { X, AlertCircle, Edit } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { LanguageSelector } from '@/components/ui/LanguageSelector';
 import type { AudioClip, AudioMetadata } from '@/types/audio';
-import { createClient } from '@supabase/supabase-js';
-import type { Database } from '@/types/supabase';
 
 interface EditClipModalProps {
   clip: AudioClip;
@@ -27,7 +25,7 @@ interface EditFormData {
 }
 
 export function EditClipModal({ clip, isOpen, onClose, onSuccess }: EditClipModalProps) {
-  const { user, getAuthHeaders } = useAuth();
+  const { user } = useAuth();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
@@ -86,7 +84,6 @@ export function EditClipModal({ clip, isOpen, onClose, onSuccess }: EditClipModa
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          ...getAuthHeaders(),
         },
         body: JSON.stringify({
           title: formData.title.trim(),

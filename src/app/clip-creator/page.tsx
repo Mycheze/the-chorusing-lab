@@ -19,7 +19,7 @@ import { UploadModal } from "@/components/upload/UploadModal";
 import { useAuth } from "@/lib/auth";
 
 export default function ClipCreatorPage() {
-  const { user, isLoading, getAuthHeaders } = useAuth();
+  const { user, isLoading } = useAuth();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [sourceUrl, setSourceUrl] = useState<string>("");
   const [fileError, setFileError] = useState<string | null>(null);

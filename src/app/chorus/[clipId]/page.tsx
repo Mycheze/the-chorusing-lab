@@ -28,7 +28,7 @@ interface ClipWithUrl extends AudioClip {
 }
 
 export default function ChorusPage() {
-  const { user, getAuthHeaders } = useAuth();
+  const { user } = useAuth();
   const params = useParams();
   const clipId = params?.clipId as string;
 
@@ -45,13 +45,7 @@ export default function ChorusPage() {
       setError(null);
 
       try {
-        const headers: HeadersInit = {};
-        if (user) {
-          const authHeaders = getAuthHeaders();
-          Object.assign(headers, authHeaders);
-        }
-
-        const response = await fetch("/api/clips", { headers });
+        const response = await fetch("/api/clips");
 
         if (!response.ok) {
           throw new Error("Failed to fetch clips");
@@ -76,7 +70,7 @@ export default function ChorusPage() {
     };
 
     fetchClip();
-  }, [clipId, user, getAuthHeaders]);
+  }, [clipId, user]);
 
   // Create a truly stable clip for the player
   // This ONLY changes when the clip ID or URL changes, NOT when metadata updates

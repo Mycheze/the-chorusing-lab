@@ -78,7 +78,7 @@ const generateTitleSuggestions = (transcript: string, filename?: string): string
 };
 
 export function UploadModal({ isOpen, onClose, onSuccess }: UploadModalProps) {
-  const { user, getAuthHeaders, isAuthenticated } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -415,9 +415,6 @@ export function UploadModal({ isOpen, onClose, onSuccess }: UploadModalProps) {
 
       const response = await fetch('/api/upload', {
         method: 'POST',
-        headers: {
-          ...getAuthHeaders(),
-        },
         body: uploadFormData,
       });
 

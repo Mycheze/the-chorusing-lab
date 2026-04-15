@@ -28,8 +28,8 @@ const anonClientId = supabaseMonitor.registerClient('anonymous');
 // Public / anon client for client-side read-only operations
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
-    persistSession: true,
-    autoRefreshToken: true,
+    persistSession: false,
+    autoRefreshToken: false,
   },
 });
 

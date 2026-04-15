@@ -17,8 +17,6 @@ import type {
   TranscriptionComparison,
   TranscriptionDiff,
 } from "@/types/audio";
-import { createClient } from "@supabase/supabase-js";
-import type { Database } from "@/types/supabase";
 import { calculateAccuracy, generateDiff } from "@/lib/transcription-diff";
 
 interface TranscriptionPracticeProps {
@@ -30,7 +28,7 @@ export function TranscriptionPractice({
   clip,
   onTranscriptionUpdate,
 }: TranscriptionPracticeProps) {
-  const { user, getAuthHeaders } = useAuth();
+  const { user } = useAuth();
   const [state, setState] = useState<TranscriptionPracticeState>({
     isRevealed: false,
     userInput: "",
@@ -114,7 +112,6 @@ export function TranscriptionPractice({
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          ...getAuthHeaders(),
         },
         body: JSON.stringify({
           title: clip.title,
@@ -149,7 +146,7 @@ export function TranscriptionPractice({
             : "Failed to save transcription",
       }));
     }
-  }, [user, state.userInput, clip, onTranscriptionUpdate, getAuthHeaders]);
+  }, [user, state.userInput, clip, onTranscriptionUpdate]);
 
   // Keyboard shortcuts
   useEffect(() => {

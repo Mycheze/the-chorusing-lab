@@ -75,10 +75,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.location.href = "/api/auth/logout";
   }, []);
 
-  const getAuthHeaders = useCallback((): HeadersInit => {
-    return {};
-  }, []);
-
   const isAuthenticated = user !== null;
 
   const value: AuthContextType = useMemo(
@@ -90,9 +86,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       login,
       register,
       logout,
-      getAuthHeaders,
     }),
-    [user, isLoading, error, isAuthenticated, login, register, logout, getAuthHeaders]
+    [user, isLoading, error, isAuthenticated, login, register, logout]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
