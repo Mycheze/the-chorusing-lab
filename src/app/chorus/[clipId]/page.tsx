@@ -205,10 +205,7 @@ export default function ChorusPage() {
               <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
                 <div className="flex items-start justify-between gap-6 mb-4">
                   <div className="flex-1">
-                    <h2 className="text-sm text-gray-500">
-                      {clip.title}
-                    </h2>
-                    <div className="flex items-center gap-4 text-sm text-gray-600 mt-1">
+                    <div className="flex items-center gap-4 text-sm font-medium text-gray-900">
                       <span>{clip.duration.toFixed(1)}s</span>
                       <span>{clip.metadata.language}</span>
                       {clip.metadata.speakerGender && (
@@ -230,6 +227,9 @@ export default function ChorusPage() {
                         </span>
                       )}
                     </div>
+                    {clip.title && (
+                      <p className="text-sm text-gray-400 mt-1">{clip.title}</p>
+                    )}
                     {clip.starCount > 0 && (
                       <div className="flex items-center gap-1 text-yellow-600 mt-2">
                         <span className="text-sm font-medium">
@@ -257,7 +257,7 @@ export default function ChorusPage() {
                         rel="noopener noreferrer"
                         className="text-indigo-600 hover:text-indigo-700 text-sm break-all mt-2 inline-block"
                       >
-                        Source
+                        {clip.metadata.sourceUrl}
                       </a>
                     )}
                   </div>
