@@ -32,7 +32,7 @@ interface AudioBrowserProps {
   onRefresh?: () => void;
 }
 
-interface ClipWithStarInfo extends AudioClip {
+export interface ClipWithStarInfo extends AudioClip {
   url: string;
   starCount: number;
   isStarredByUser: boolean;
