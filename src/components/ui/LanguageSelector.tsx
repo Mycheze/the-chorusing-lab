@@ -8,6 +8,8 @@ interface LanguageSelectorProps {
   onChange: (language: string) => void;
   required?: boolean;
   className?: string;
+  /** Map of language name to clip count — languages with clips sort first by count */
+  languageCounts?: Record<string, number>;
 }
 
 // Comprehensive language list with English and native names
@@ -84,6 +86,7 @@ export function LanguageSelector({
   onChange,
   required = false,
   className = "",
+  languageCounts,
 }: LanguageSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -91,13 +94,21 @@ export function LanguageSelector({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Filter languages based on search term
+  // Filter languages based on search term, then sort by clip count if available
   const filteredLanguages = LANGUAGES.filter(
     (lang) =>
       lang.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       lang.native.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      lang.code.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+      lang.code.toLowerCase().includes(searchTerm.toLowerCase()),
+  ).sort((a, b) => {
+    if (!languageCounts) return 0; // keep alphabetical if no counts
+    const countA = languageCounts[a.name] || 0;
+    const countB = languageCounts[b.name] || 0;
+    if (countA > 0 && countB === 0) return -1;
+    if (countA === 0 && countB > 0) return 1;
+    if (countA !== countB) return countB - countA;
+    return 0; // preserve alphabetical within same count
+  });
 
   // Find selected language object
   const selectedLanguage = LANGUAGES.find((lang) => lang.name === value);
@@ -145,13 +156,13 @@ export function LanguageSelector({
       case "ArrowDown":
         e.preventDefault();
         setHighlightedIndex((prev) =>
-          prev < filteredLanguages.length - 1 ? prev + 1 : 0
+          prev < filteredLanguages.length - 1 ? prev + 1 : 0,
         );
         break;
       case "ArrowUp":
         e.preventDefault();
         setHighlightedIndex((prev) =>
-          prev > 0 ? prev - 1 : filteredLanguages.length - 1
+          prev > 0 ? prev - 1 : filteredLanguages.length - 1,
         );
         break;
       case "Enter":
@@ -243,7 +254,9 @@ export function LanguageSelector({
                   <div className="flex items-center justify-between">
                     <span className="font-medium">{language.name}</span>
                     <span className="text-gray-500 text-xs">
-                      {language.native}
+                      {languageCounts && languageCounts[language.name]
+                        ? `${languageCounts[language.name]} · ${language.native}`
+                        : language.native}
                     </span>
                   </div>
                 </button>

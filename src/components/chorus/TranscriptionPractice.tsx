@@ -76,7 +76,7 @@ export function TranscriptionPractice({
     setState((prev) => ({ ...prev, userInput: value, showComparison: false }));
   }, []);
 
-  const checkTranscription = useCallback(() => {
+  const checkTranscription = useCallback(async () => {
     if (!hasOriginalTranscript || !state.userInput.trim()) return;
 
     const comparison = calculateDiff(
@@ -88,11 +88,36 @@ export function TranscriptionPractice({
       comparison,
       showComparison: true,
     }));
+
+    // Track transcription attempt
+    if (user) {
+      try {
+        await fetch("/api/tracking/transcription", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...getAuthHeaders(),
+          },
+          body: JSON.stringify({
+            clip_id: clip.id,
+            accuracy: comparison.accuracy,
+            characters_correct: comparison.correctCharacters,
+            characters_total: comparison.totalCharacters,
+            is_submission: false,
+          }),
+        });
+      } catch (error) {
+        console.warn("Failed to track transcription attempt:", error);
+      }
+    }
   }, [
     hasOriginalTranscript,
     state.userInput,
+    clip,
     clip.metadata.transcript,
     calculateDiff,
+    user,
+    getAuthHeaders,
   ]);
 
   const resetInput = useCallback(() => {
@@ -132,6 +157,26 @@ export function TranscriptionPractice({
 
       // Success - update parent component
       onTranscriptionUpdate?.(state.userInput.trim());
+
+      // Track transcription submission
+      try {
+        await fetch("/api/tracking/transcription", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...getAuthHeaders(),
+          },
+          body: JSON.stringify({
+            clip_id: clip.id,
+            accuracy: null, // No accuracy for new submissions
+            characters_correct: null,
+            characters_total: null,
+            is_submission: true,
+          }),
+        });
+      } catch (error) {
+        console.warn("Failed to track transcription submission:", error);
+      }
 
       setState((prev) => ({
         ...prev,

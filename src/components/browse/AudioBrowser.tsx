@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import {
   Search,
@@ -26,7 +26,12 @@ import { AudioPlayer } from "@/components/audio/AudioPlayer";
 import { EditClipModal } from "./EditClipModal";
 import { LanguageSelector } from "@/components/ui/LanguageSelector";
 import { useAuth } from "@/lib/auth";
-import type { AudioClip, AudioFilters, AudioSort, FilterPreferences } from "@/types/audio";
+import type {
+  AudioClip,
+  AudioFilters,
+  AudioSort,
+  FilterPreferences,
+} from "@/types/audio";
 
 interface AudioBrowserProps {
   onRefresh?: () => void;
@@ -62,7 +67,7 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
   const [playingClip, setPlayingClip] = useState<string | null>(null);
   const [editingClip, setEditingClip] = useState<ClipWithStarInfo | null>(null);
   const [deletingClip, setDeletingClip] = useState<ClipWithStarInfo | null>(
-    null
+    null,
   );
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
@@ -70,7 +75,7 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
   const [filters, setFilters] = useState<AudioFilters>(() => {
     const urlFilters: AudioFilters = {};
     if (!searchParams) return urlFilters;
-    
+
     const language = searchParams.get("language");
     const speakerGender = searchParams.get("speakerGender");
     const speakerAgeRange = searchParams.get("speakerAgeRange");
@@ -92,7 +97,7 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
 
   const [sort, setSort] = useState<AudioSort>(() => {
     if (!searchParams) return { field: "createdAt", direction: "desc" };
-    
+
     const field = searchParams.get("sortField") || "createdAt";
     const direction = (searchParams.get("sortDirection") || "desc") as
       | "asc"
@@ -101,14 +106,14 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
   });
 
   const [searchTerm, setSearchTerm] = useState(
-    () => searchParams?.get("search") || ""
+    () => searchParams?.get("search") || "",
   );
   const [showFilters, setShowFilters] = useState(true);
   const [showStarred, setShowStarred] = useState(
-    () => searchParams?.get("starred") === "true"
+    () => searchParams?.get("starred") === "true",
   );
   const [showMyUploads, setShowMyUploads] = useState(
-    () => searchParams?.get("myUploads") === "true"
+    () => searchParams?.get("myUploads") === "true",
   );
 
   // Use refs to track latest values for debounced updates
@@ -118,11 +123,18 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
   const showMyUploadsRef = useRef(showMyUploads);
   const fetchClipsRef = useRef<typeof fetchClips>();
   const clipsLengthRef = useRef(clips.length);
+  const fetchGenerationRef = useRef(0);
+
+  // Language counts from all clips (unfiltered) for sorting the language dropdown
+  const allLanguageCountsRef = useRef<Record<string, number> | null>(null);
+  const [allLanguageCounts, setAllLanguageCounts] = useState<
+    Record<string, number>
+  >({});
 
   // Refs for preference management
   const preferencesLoadedRef = useRef(false);
   const lastSavedPreferencesRef = useRef<FilterPreferences | null>(null);
-  
+
   // Track if initial load has completed (use state so we can use it in render)
   const [hasInitialLoad, setHasInitialLoad] = useState(false);
   const hasInitialLoadRef = useRef(false);
@@ -156,8 +168,9 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
   // Save preferences when preference filters change (debounced)
   useEffect(() => {
     if (!user) return;
-    // Allow saves immediately - if preferences haven't loaded yet, that's fine
-    // We'll just overwrite whatever was there before
+    // Don't save until preferences have loaded — otherwise we overwrite
+    // saved preferences with the empty initial state
+    if (!preferencesLoadedRef.current) return;
 
     // Extract only preference fields
     const currentPreferences: FilterPreferences = {};
@@ -188,7 +201,8 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
       lastSaved.speakerDialect !== currentPreferences.speakerDialect ||
       lastSaved.speedFilter !== currentPreferences.speedFilter ||
       lastSaved.defaultSort?.field !== currentPreferences.defaultSort?.field ||
-      lastSaved.defaultSort?.direction !== currentPreferences.defaultSort?.direction;
+      lastSaved.defaultSort?.direction !==
+        currentPreferences.defaultSort?.direction;
 
     if (!hasChanged) return;
 
@@ -228,7 +242,16 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
     }, 1500);
 
     return () => clearTimeout(timeoutId);
-  }, [filters.language, filters.speakerGender, filters.speakerAgeRange, filters.speakerDialect, filters.speedFilter, sort, user, getAuthHeaders]);
+  }, [
+    filters.language,
+    filters.speakerGender,
+    filters.speakerAgeRange,
+    filters.speakerDialect,
+    filters.speedFilter,
+    sort,
+    user,
+    getAuthHeaders,
+  ]);
 
   // Fetch available dialects when language changes
   useEffect(() => {
@@ -241,7 +264,9 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
     const fetchDialects = async () => {
       setLoadingDialects(true);
       try {
-        const response = await fetch(`/api/dialects?language=${encodeURIComponent(language)}`);
+        const response = await fetch(
+          `/api/dialects?language=${encodeURIComponent(language)}`,
+        );
         if (response.ok) {
           const data = await response.json();
           setAvailableDialects(data.dialects || []);
@@ -266,7 +291,7 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
       newSort: AudioSort,
       newSearchTerm: string,
       newShowStarred: boolean,
-      newShowMyUploads: boolean
+      newShowMyUploads: boolean,
     ) => {
       const params = new URLSearchParams();
 
@@ -299,17 +324,17 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
       // Update URL without causing a page reload
       router.replace(`${pathname}?${params.toString()}`, { scroll: false });
     },
-    [router, pathname]
+    [router, pathname],
   );
 
   // Load user preferences BEFORE initial fetch to avoid flashing
   useEffect(() => {
     if (preferencesLoadedRef.current) return;
-    
+
     const loadPreferences = async () => {
       setPreferencesLoading(true);
       setPreferencesApplied(false);
-      
+
       if (!user) {
         // No user, so no preferences to load
         preferencesLoadedRef.current = true;
@@ -345,7 +370,7 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
           } else if (preferences) {
             // No URL params - apply preferences to filters BEFORE initial fetch
             console.log("✅ Loaded preferences:", preferences);
-            
+
             // Build new filters with preferences applied
             const newFilters: AudioFilters = {
               ...filtersRef.current,
@@ -387,7 +412,7 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
               newSort,
               searchTerm,
               showStarredRef.current,
-              showMyUploadsRef.current
+              showMyUploadsRef.current,
             );
 
             // Track last saved preferences
@@ -416,136 +441,139 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
     loadPreferences();
   }, [user, searchParams, getAuthHeaders, updateURL, searchTerm]);
 
-  const fetchClips = useCallback(async (isFilterChange: boolean = false, retryCount = 0) => {
-    // Only set loading: true on initial load, not when filters change
-    if (isFilterChange) {
-      setIsFiltering(true);
-    } else {
-      setLoading(true);
-    }
-    setError(null);
+  const fetchClips = useCallback(
+    async (isFilterChange: boolean = false, retryCount = 0) => {
+      // Track fetch generation to discard stale results when multiple fetches race
+      const generation = ++fetchGenerationRef.current;
 
-    try {
-      const params = new URLSearchParams();
-
-      // Add filters
-      if (filters.language) params.append("language", filters.language);
-      if (filters.speakerGender)
-        params.append("speakerGender", filters.speakerGender);
-      if (filters.speakerAgeRange)
-        params.append("speakerAgeRange", filters.speakerAgeRange);
-      if (filters.uploadedBy) params.append("uploadedBy", filters.uploadedBy);
-      if (filters.tags && filters.tags.length > 0) {
-        params.append("tags", filters.tags.join(","));
+      // Only set loading: true on initial load, not when filters change
+      if (isFilterChange) {
+        setIsFiltering(true);
+      } else {
+        setLoading(true);
       }
-      if (filters.speedFilter) {
-        params.append("speedFilter", filters.speedFilter);
-      }
+      setError(null);
 
-      // Add special filters
-      if (showStarred) params.append("starred", "true");
-      if (showMyUploads) params.append("myUploads", "true");
-
-      // Add sorting
-      params.append("sortField", sort.field);
-      params.append("sortDirection", sort.direction);
-
-      const headers: HeadersInit = {
-        ...getAuthHeaders(),
-      };
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-
-      let response: Response;
       try {
-        response = await fetch(`/api/clips?${params.toString()}`, {
-          headers,
-          signal: controller.signal,
-        });
-        clearTimeout(timeoutId);
-      } catch (fetchError: any) {
-        clearTimeout(timeoutId);
-        
-        // Check if it's a network/connection error
-        if (fetchError.name === 'AbortError' || fetchError.message?.includes('fetch failed') || fetchError.message?.includes('network')) {
-          // Retry on network errors (up to 2 retries)
-          if (retryCount < 2) {
+        const params = new URLSearchParams();
+
+        // Add filters
+        if (filters.language) params.append("language", filters.language);
+        if (filters.speakerGender)
+          params.append("speakerGender", filters.speakerGender);
+        if (filters.speakerAgeRange)
+          params.append("speakerAgeRange", filters.speakerAgeRange);
+        if (filters.uploadedBy) params.append("uploadedBy", filters.uploadedBy);
+        if (filters.tags && filters.tags.length > 0) {
+          params.append("tags", filters.tags.join(","));
+        }
+        if (filters.speedFilter) {
+          params.append("speedFilter", filters.speedFilter);
+        }
+
+        // Add special filters
+        if (showStarred) params.append("starred", "true");
+        if (showMyUploads) params.append("myUploads", "true");
+
+        // Add sorting
+        params.append("sortField", sort.field);
+        params.append("sortDirection", sort.direction);
+
+        const headers: HeadersInit = {
+          ...getAuthHeaders(),
+        };
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
+        let response: Response;
+        try {
+          response = await fetch(`/api/clips?${params.toString()}`, {
+            headers,
+            signal: controller.signal,
+          });
+          clearTimeout(timeoutId);
+        } catch (fetchError: any) {
+          clearTimeout(timeoutId);
+
+          // Check if it's a network/connection error
+          if (
+            fetchError.name === "AbortError" ||
+            fetchError.message?.includes("fetch failed") ||
+            fetchError.message?.includes("network")
+          ) {
+            // Retry on network errors (up to 2 retries)
+            if (retryCount < 2) {
+              const backoffMs = Math.min(500 * Math.pow(2, retryCount), 2000);
+              await new Promise((resolve) => setTimeout(resolve, backoffMs));
+              return fetchClips(isFilterChange, retryCount + 1);
+            }
+            throw new Error(
+              "Connection failed. Please check your internet connection and try again.",
+            );
+          }
+          throw fetchError;
+        }
+
+        if (!response.ok) {
+          // Try to get error message from response
+          let errorMessage = "Failed to fetch clips";
+          try {
+            const errorData = await response.json();
+            errorMessage = errorData.error || errorMessage;
+          } catch {
+            // If response isn't JSON, use status text
+            errorMessage = response.statusText || errorMessage;
+          }
+
+          // Retry on 5xx errors (server errors)
+          if (
+            response.status >= 500 &&
+            response.status < 600 &&
+            retryCount < 2
+          ) {
             const backoffMs = Math.min(500 * Math.pow(2, retryCount), 2000);
-            await new Promise(resolve => setTimeout(resolve, backoffMs));
+            await new Promise((resolve) => setTimeout(resolve, backoffMs));
             return fetchClips(isFilterChange, retryCount + 1);
           }
-          throw new Error("Connection failed. Please check your internet connection and try again.");
-        }
-        throw fetchError;
-      }
 
-      if (!response.ok) {
-        // Try to get error message from response
-        let errorMessage = "Failed to fetch clips";
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData.error || errorMessage;
-        } catch {
-          // If response isn't JSON, use status text
-          errorMessage = response.statusText || errorMessage;
+          throw new Error(errorMessage);
         }
-        
-        // Retry on 5xx errors (server errors)
-        if (response.status >= 500 && response.status < 600 && retryCount < 2) {
-          const backoffMs = Math.min(500 * Math.pow(2, retryCount), 2000);
-          await new Promise(resolve => setTimeout(resolve, backoffMs));
-          return fetchClips(isFilterChange, retryCount + 1);
+
+        const data = await response.json();
+
+        // Discard results if a newer fetch has started (prevents stale data flash)
+        if (generation !== fetchGenerationRef.current) return;
+
+        // Gracefully handle partial data
+        if (data.clips && Array.isArray(data.clips)) {
+          setClips(data.clips);
+        } else {
+          // If response format is unexpected, show empty array instead of error
+          console.warn("Unexpected response format from /api/clips:", data);
+          setClips([]);
         }
-        
-        throw new Error(errorMessage);
-      }
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : "Failed to load clips";
 
-      const data = await response.json();
-      
-      // Gracefully handle partial data
-      if (data.clips && Array.isArray(data.clips)) {
-        setClips(data.clips);
-      } else {
-        // If response format is unexpected, show empty array instead of error
-        console.warn("Unexpected response format from /api/clips:", data);
-        setClips([]);
+        // Don't show error if we have existing clips (graceful degradation)
+        if (clips.length > 0 && isFilterChange) {
+          console.warn("Failed to update clips:", errorMessage);
+          // Keep existing clips visible
+        } else {
+          setError(errorMessage);
+        }
+      } finally {
+        if (isFilterChange) {
+          setIsFiltering(false);
+        } else {
+          setLoading(false);
+        }
       }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Failed to load clips";
-      
-      // Don't show error if we have existing clips (graceful degradation)
-      if (clips.length > 0 && isFilterChange) {
-        console.warn("Failed to update clips:", errorMessage);
-        // Keep existing clips visible
-      } else {
-        setError(errorMessage);
-      }
-    } finally {
-      if (isFilterChange) {
-        setIsFiltering(false);
-      } else {
-        setLoading(false);
-      }
-    }
-  }, [filters, sort, showStarred, showMyUploads, getAuthHeaders, clips.length]);
-
-  // Initial load - wait for preferences to load AND be applied first, then fetch with correct filters
-  useEffect(() => {
-    // Don't fetch until preferences are loaded AND applied (or if no user, both will be true quickly)
-    if (hasInitialLoadRef.current || preferencesLoading || !preferencesApplied) return;
-    
-    // Preferences are loaded and applied, now do initial fetch with correct filters
-    // Use a small delay to ensure state has propagated (but much shorter than before)
-    const timeoutId = setTimeout(() => {
-      fetchClips(false);
-      hasInitialLoadRef.current = true;
-      setHasInitialLoad(true);
-    }, 50); // Minimal delay just to ensure React state has updated
-    
-    return () => clearTimeout(timeoutId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [preferencesLoading, preferencesApplied]); // Wait for preferences to load and be applied before initial fetch
+    },
+    [filters, sort, showStarred, showMyUploads, getAuthHeaders, clips.length],
+  );
 
   // Handle refresh from parent
   useEffect(() => {
@@ -562,28 +590,58 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
     fetchClipsRef.current = fetchClips;
   }, [fetchClips]);
 
-  // Watch for filter/sort changes and fetch in background
-  // This includes: filters, sort, showStarred, showMyUploads
+  // Fetch language counts once (unfiltered) for sorting the language dropdown
   useEffect(() => {
-    // Skip if initial load hasn't happened yet
-    if (!hasInitialLoadRef.current) return;
-    
-    // ALWAYS use background loading after initial load completes
-    // This ensures smooth transitions for ALL filter changes including Starred/My Uploads
-    // The only time we show full-page spinner is on the very first mount
-    const isFilterChange = true;
-    
-    // Fetch with isFilterChange=true to show subtle loading indicator
-    // Use a timeout to batch rapid filter changes
-    const timeoutId = setTimeout(() => {
-      if (fetchClipsRef.current) {
-        fetchClipsRef.current(isFilterChange);
+    if (allLanguageCountsRef.current) return;
+    const fetchCounts = async () => {
+      try {
+        const response = await fetch("/api/clips", {
+          headers: { ...getAuthHeaders() },
+        });
+        if (!response.ok) return;
+        const data = await response.json();
+        if (data.clips && Array.isArray(data.clips)) {
+          const counts: Record<string, number> = {};
+          for (const clip of data.clips) {
+            const lang = clip.metadata?.language;
+            if (lang) counts[lang] = (counts[lang] || 0) + 1;
+          }
+          allLanguageCountsRef.current = counts;
+          setAllLanguageCounts(counts);
+        }
+      } catch {
+        // Non-critical — dropdown just won't be sorted
       }
-    }, 0);
-    
+    };
+    fetchCounts();
+  }, [getAuthHeaders]);
+
+  // Single unified fetch effect — replaces separate initial-load and filter-change effects
+  // to eliminate the race condition where both could fire on the same render cycle.
+  // preferencesApplied is included so the effect fires when preferences finish loading
+  // even if the filter values themselves didn't change (e.g. no user, or URL params take precedence).
+  useEffect(() => {
+    // Don't fetch until preferences are loaded and applied
+    if (!preferencesLoadedRef.current) return;
+
+    const isFilterChange = hasInitialLoadRef.current;
+
+    const timeoutId = setTimeout(
+      () => {
+        if (fetchClipsRef.current) {
+          fetchClipsRef.current(isFilterChange);
+        }
+        if (!hasInitialLoadRef.current) {
+          hasInitialLoadRef.current = true;
+          setHasInitialLoad(true);
+        }
+      },
+      hasInitialLoadRef.current ? 0 : 50,
+    );
+
     return () => clearTimeout(timeoutId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters, sort, showStarred, showMyUploads]); // All filter changes use background loading
+  }, [filters, sort, showStarred, showMyUploads, preferencesApplied]); // All fetches go through this single effect
 
   const handleFilterChange = (key: keyof AudioFilters, value: any) => {
     setFilters((prev) => {
@@ -596,11 +654,11 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
 
   const handleLanguageFilterChange = (language: string) => {
     setFilters((prev) => {
-      const newFilters = { 
-        ...prev, 
+      const newFilters = {
+        ...prev,
         language: language || undefined,
         // Clear dialect when language changes
-        speakerDialect: language ? prev.speakerDialect : undefined
+        speakerDialect: language ? prev.speakerDialect : undefined,
       };
       updateURL(newFilters, sort, searchTerm, showStarred, showMyUploads);
       // fetchClips will be called by useEffect when filters change
@@ -611,7 +669,7 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
   const handleSortChange = (field: AudioSort["field"]) => {
     setSort((prev) => {
       let newDirection: "asc" | "desc";
-      
+
       if (prev.field === field) {
         // Same field - toggle direction
         newDirection = prev.direction === "asc" ? "desc" : "asc";
@@ -630,7 +688,7 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
           newDirection = "asc";
         }
       }
-      
+
       const newSort: AudioSort = {
         field,
         direction: newDirection,
@@ -645,6 +703,9 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
     setSearchTerm(term);
   };
 
+  // Use stable language counts from the unfiltered fetch for the dropdown sort
+  // (allLanguageCounts is populated once on mount, not from the filtered clips)
+
   // Debounce search term URL updates (only for search term, other filters update immediately)
   // Use a longer debounce (1.5s) so URL only updates when user has stopped typing
   // This prevents reload-like behavior while still preserving search in URL
@@ -656,7 +717,7 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
         sortRef.current,
         searchTerm,
         showStarredRef.current,
-        showMyUploadsRef.current
+        showMyUploadsRef.current,
       );
     }, 1500);
     return () => clearTimeout(timeoutId);
@@ -707,8 +768,8 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
                     ? clip.starCount - 1
                     : clip.starCount + 1,
                 }
-              : clip
-          )
+              : clip,
+          ),
         );
       }
     } catch (error) {
@@ -768,8 +829,8 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
   const handleEditSuccess = (updatedClip: AudioClip) => {
     setClips((prev) =>
       prev.map((clip) =>
-        clip.id === updatedClip.id ? { ...clip, ...updatedClip } : clip
-      )
+        clip.id === updatedClip.id ? { ...clip, ...updatedClip } : clip,
+      ),
     );
     setEditingClip(null);
   };
@@ -825,9 +886,9 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold text-gray-900">Audio Library</h2>
         <div className="flex items-center gap-2 text-sm text-gray-600">
-          <div 
+          <div
             className={`w-4 h-4 border-2 border-gray-300 border-t-indigo-600 rounded-full transition-opacity duration-200 ${
-              isFiltering ? 'opacity-100 animate-spin' : 'opacity-0'
+              isFiltering ? "opacity-100 animate-spin" : "opacity-0"
             }`}
             aria-hidden="true"
           />
@@ -905,6 +966,7 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
                 value={filters.language || ""}
                 onChange={handleLanguageFilterChange}
                 className="w-full"
+                languageCounts={allLanguageCounts}
               />
             </div>
 
@@ -917,7 +979,7 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
                 onChange={(e) =>
                   handleFilterChange(
                     "speakerGender",
-                    e.target.value || undefined
+                    e.target.value || undefined,
                   )
                 }
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
@@ -938,7 +1000,7 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
                 onChange={(e) =>
                   handleFilterChange(
                     "speakerAgeRange",
-                    e.target.value || undefined
+                    e.target.value || undefined,
                   )
                 }
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
@@ -959,7 +1021,8 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
                     <div className="relative group">
                       <Info className="w-4 h-4 text-gray-400 hover:text-gray-600 cursor-help" />
                       <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block z-10 w-64 p-2 bg-gray-900 text-white text-xs rounded-md shadow-lg">
-                        Don&apos;t see your target dialect? That&apos;s because no one has added clips for it yet! You can be the first.
+                        Don&apos;t see your target dialect? That&apos;s because
+                        no one has added clips for it yet! You can be the first.
                         <div className="absolute left-2 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
                       </div>
                     </div>
@@ -971,7 +1034,7 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
                 onChange={(e) =>
                   handleFilterChange(
                     "speakerDialect",
-                    e.target.value || undefined
+                    e.target.value || undefined,
                   )
                 }
                 disabled={!filters.language || loadingDialects}
@@ -1000,10 +1063,7 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
               <select
                 value={filters.speedFilter || ""}
                 onChange={(e) =>
-                  handleFilterChange(
-                    "speedFilter",
-                    e.target.value || undefined
-                  )
+                  handleFilterChange("speedFilter", e.target.value || undefined)
                 }
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
               >
@@ -1046,36 +1106,41 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
       {/* Sort Controls */}
       <div className="flex gap-2 text-sm flex-wrap">
         <span className="text-gray-600">Sort by:</span>
-        {([
-          { field: "voteScore" as const, label: "Vote Score (Best First)" },
-          { field: "difficulty" as const, label: "Difficulty (Easiest First)" },
-          { field: "charactersPerSecond" as const, label: "Speed (Slowest First)" },
-          { field: "title" as const, label: "Title" },
-          { field: "duration" as const, label: "Duration" },
-          { field: "language" as const, label: "Language" },
-          { field: "createdAt" as const, label: "Newest First" },
-        ] as const).map(
-          ({ field, label }) => (
-            <button
-              key={field}
-              onClick={() => handleSortChange(field)}
-              className={`flex items-center gap-1 px-2 py-1 rounded hover:bg-gray-100 ${
-                sort.field === field
-                  ? "bg-indigo-50 text-indigo-700"
-                  : "text-gray-600"
-              }`}
-            >
-              {label}
-              {sort.field === field && (
-                sort.direction === "asc" ? (
-                  <ChevronUp className="w-3 h-3" />
-                ) : (
-                  <ChevronDown className="w-3 h-3" />
-                )
-              )}
-            </button>
-          )
-        )}
+        {(
+          [
+            { field: "voteScore" as const, label: "Vote Score (Best First)" },
+            {
+              field: "difficulty" as const,
+              label: "Difficulty (Easiest First)",
+            },
+            {
+              field: "charactersPerSecond" as const,
+              label: "Speed (Slowest First)",
+            },
+            { field: "title" as const, label: "Title" },
+            { field: "duration" as const, label: "Duration" },
+            { field: "language" as const, label: "Language" },
+            { field: "createdAt" as const, label: "Newest First" },
+          ] as const
+        ).map(({ field, label }) => (
+          <button
+            key={field}
+            onClick={() => handleSortChange(field)}
+            className={`flex items-center gap-1 px-2 py-1 rounded hover:bg-gray-100 ${
+              sort.field === field
+                ? "bg-indigo-50 text-indigo-700"
+                : "text-gray-600"
+            }`}
+          >
+            {label}
+            {sort.field === field &&
+              (sort.direction === "asc" ? (
+                <ChevronUp className="w-3 h-3" />
+              ) : (
+                <ChevronDown className="w-3 h-3" />
+              ))}
+          </button>
+        ))}
       </div>
 
       {/* Clips List */}
@@ -1162,15 +1227,24 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
                               )}
                             </span>
                           )}
-                          {(clip.voteScore !== undefined && clip.voteScore !== 0) || (clip.upvoteCount ?? 0) > 0 || (clip.downvoteCount ?? 0) > 0 ? (
-                            <span className={`flex items-center gap-1 ${
-                              (clip.voteScore ?? 0) > 0 ? "text-green-600" : 
-                              (clip.voteScore ?? 0) < 0 ? "text-red-600" : 
-                              "text-gray-500"
-                            }`}>
-                              {(clip.voteScore ?? 0) > 0 ? "+" : ""}{clip.voteScore ?? 0}
+                          {(clip.voteScore !== undefined &&
+                            clip.voteScore !== 0) ||
+                          (clip.upvoteCount ?? 0) > 0 ||
+                          (clip.downvoteCount ?? 0) > 0 ? (
+                            <span
+                              className={`flex items-center gap-1 ${
+                                (clip.voteScore ?? 0) > 0
+                                  ? "text-green-600"
+                                  : (clip.voteScore ?? 0) < 0
+                                    ? "text-red-600"
+                                    : "text-gray-500"
+                              }`}
+                            >
+                              {(clip.voteScore ?? 0) > 0 ? "+" : ""}
+                              {clip.voteScore ?? 0}
                               <span className="text-xs text-gray-500">
-                                ({clip.upvoteCount ?? 0}↑/{clip.downvoteCount ?? 0}↓)
+                                ({clip.upvoteCount ?? 0}↑/
+                                {clip.downvoteCount ?? 0}↓)
                               </span>
                             </span>
                           ) : null}
@@ -1178,11 +1252,15 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
                             <span className="flex items-center gap-1 text-purple-600">
                               {clip.charactersPerSecond.toFixed(1)} chars/s
                               {clip.speedCategory && (
-                                <span className={`ml-1 px-1.5 py-0.5 rounded text-xs ${
-                                  clip.speedCategory === "slow" ? "bg-blue-100 text-blue-700" :
-                                  clip.speedCategory === "medium" ? "bg-yellow-100 text-yellow-700" :
-                                  "bg-orange-100 text-orange-700"
-                                }`}>
+                                <span
+                                  className={`ml-1 px-1.5 py-0.5 rounded text-xs ${
+                                    clip.speedCategory === "slow"
+                                      ? "bg-blue-100 text-blue-700"
+                                      : clip.speedCategory === "medium"
+                                        ? "bg-yellow-100 text-yellow-700"
+                                        : "bg-orange-100 text-orange-700"
+                                  }`}
+                                >
                                   {clip.speedCategory}
                                 </span>
                               )}

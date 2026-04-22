@@ -160,6 +160,108 @@ export interface Database {
           created_at?: string
         }
       }
+      clip_sessions: {
+        Row: {
+          id: string
+          user_id: string
+          clip_id: string
+          started_at: string
+          ended_at: string | null
+          total_time_seconds: number
+          loop_count: number
+          restart_count: number
+          language: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          clip_id: string
+          started_at?: string
+          ended_at?: string | null
+          total_time_seconds?: number
+          loop_count?: number
+          restart_count?: number
+          language: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          clip_id?: string
+          started_at?: string
+          ended_at?: string | null
+          total_time_seconds?: number
+          loop_count?: number
+          restart_count?: number
+          language?: string
+          created_at?: string
+        }
+      }
+      transcription_attempts: {
+        Row: {
+          id: string
+          user_id: string
+          clip_id: string
+          attempted_at: string
+          accuracy: number | null
+          is_submission: boolean
+          characters_correct: number | null
+          characters_total: number | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          clip_id: string
+          attempted_at?: string
+          accuracy?: number | null
+          is_submission?: boolean
+          characters_correct?: number | null
+          characters_total?: number | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          clip_id?: string
+          attempted_at?: string
+          accuracy?: number | null
+          is_submission?: boolean
+          characters_correct?: number | null
+          characters_total?: number | null
+          created_at?: string
+        }
+      }
+      user_stats_cache: {
+        Row: {
+          user_id: string
+          total_chorusing_time_seconds: number
+          total_clips_practiced: number
+          total_transcription_attempts: number
+          total_clips_submitted: number
+          language_stats: Json
+          last_updated_at: string
+        }
+        Insert: {
+          user_id: string
+          total_chorusing_time_seconds?: number
+          total_clips_practiced?: number
+          total_transcription_attempts?: number
+          total_clips_submitted?: number
+          language_stats?: Json
+          last_updated_at?: string
+        }
+        Update: {
+          user_id?: string
+          total_chorusing_time_seconds?: number
+          total_clips_practiced?: number
+          total_transcription_attempts?: number
+          total_clips_submitted?: number
+          language_stats?: Json
+          last_updated_at?: string
+        }
+      }
     }
     Views: {
       [_ in never]: never
@@ -182,6 +284,9 @@ export type AudioClipRow = Database['public']['Tables']['audio_clips']['Row']
 export type ClipStar = Database['public']['Tables']['clip_stars']['Row']
 export type ClipDifficultyRating = Database['public']['Tables']['clip_difficulty_ratings']['Row']
 export type ClipVote = Database['public']['Tables']['clip_votes']['Row']
+export type ClipSession = Database['public']['Tables']['clip_sessions']['Row']
+export type TranscriptionAttempt = Database['public']['Tables']['transcription_attempts']['Row']
+export type UserStatsCache = Database['public']['Tables']['user_stats_cache']['Row']
 
 // Converted types that match our existing AudioClip interface
 export interface SupabaseAudioClip {

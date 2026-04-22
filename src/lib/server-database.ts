@@ -2,7 +2,12 @@
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
 import type { User } from "@/types/auth";
-import type { AudioClip, AudioFilters, AudioSort, FilterPreferences } from "@/types/audio";
+import type {
+  AudioClip,
+  AudioFilters,
+  AudioSort,
+  FilterPreferences,
+} from "@/types/audio";
 import {
   convertAudioClipFromDb,
   convertAudioClipToDb,
@@ -23,12 +28,12 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error(
-    "Missing Supabase environment variables. Please check your .env.local file."
+    "Missing Supabase environment variables. Please check your .env.local file.",
   );
 }
 
 // Track server client instance
-const serverClientId = supabaseMonitor.registerClient('server');
+const serverClientId = supabaseMonitor.registerClient("server");
 
 // Create client for server-side operations (using anon key for now)
 const supabaseServer = createClient<Database>(supabaseUrl, supabaseAnonKey, {
@@ -54,24 +59,24 @@ class SupabaseDatabase {
   private async monitorDbOperation<T>(
     operation: string,
     fn: () => Promise<T>,
-    options: { retry?: boolean } = {}
+    options: { retry?: boolean } = {},
   ): Promise<T> {
-    const requestId = supabaseMonitor.startRequest('database', operation);
+    const requestId = supabaseMonitor.startRequest("database", operation);
     const timeoutMs = 30000; // 30 seconds
     const shouldRetry = options.retry !== false; // Default to true
-    
+
     const executeOperation = async (): Promise<T> => {
       return Promise.race([
         fn(),
         new Promise<never>((_, reject) =>
           setTimeout(() => {
             supabaseMonitor.timeoutRequest(requestId, timeoutMs);
-            reject(new Error('Operation timeout'));
-          }, timeoutMs)
+            reject(new Error("Operation timeout"));
+          }, timeoutMs),
         ),
       ]);
     };
-    
+
     try {
       const result = shouldRetry
         ? await retryWithBackoff(executeOperation, {
@@ -79,33 +84,39 @@ class SupabaseDatabase {
             initialDelayMs: 500,
             maxDelayMs: 5000,
             onRetry: (attempt, error) => {
-              console.warn(`Retrying ${operation} (attempt ${attempt}):`, error?.message);
+              console.warn(
+                `Retrying ${operation} (attempt ${attempt}):`,
+                error?.message,
+              );
             },
           })
         : await executeOperation();
-        
-      const duration = Date.now() - (supabaseMonitor as any).inFlightRequests.get(requestId)?.startTime || 0;
+
+      const duration =
+        Date.now() -
+          (supabaseMonitor as any).inFlightRequests.get(requestId)?.startTime ||
+        0;
       supabaseMonitor.completeRequest(requestId, {
-        type: 'database',
+        type: "database",
         operation,
         duration,
-        status: 'success',
+        status: "success",
         responseSize: JSON.stringify(result).length,
       });
       return result;
     } catch (error: any) {
       const inFlight = (supabaseMonitor as any).inFlightRequests.get(requestId);
       const duration = inFlight ? Date.now() - inFlight.startTime : 0;
-      const isTimeout = error?.message === 'Operation timeout';
-      
+      const isTimeout = error?.message === "Operation timeout";
+
       if (!isTimeout) {
         // Only complete if not already timed out
         supabaseMonitor.completeRequest(requestId, {
-          type: 'database',
+          type: "database",
           operation,
           duration,
-          status: 'failure',
-          error: error?.message || 'Unknown error',
+          status: "failure",
+          error: error?.message || "Unknown error",
           errorCode: error?.code || error?.statusCode?.toString(),
         });
       }
@@ -120,7 +131,7 @@ class SupabaseDatabase {
 
   // Helper to lookup user email by username
   async getUserEmailByUsername(username: string): Promise<string | null> {
-    return this.monitorDbOperation('getUserEmailByUsername', async () => {
+    return this.monitorDbOperation("getUserEmailByUsername", async () => {
       const { data: profile, error } = await supabaseServer
         .from("profiles")
         .select("email")
@@ -137,7 +148,7 @@ class SupabaseDatabase {
 
   // Helper to get user profile by email
   async getUserByEmail(email: string): Promise<User | null> {
-    return this.monitorDbOperation('getUserByEmail', async () => {
+    return this.monitorDbOperation("getUserByEmail", async () => {
       const { data: profile, error } = await supabaseServer
         .from("profiles")
         .select("*")
@@ -159,7 +170,7 @@ class SupabaseDatabase {
 
   // Helper to get user profile by username
   async getUserByUsername(username: string): Promise<User | null> {
-    return this.monitorDbOperation('getUserByUsername', async () => {
+    return this.monitorDbOperation("getUserByUsername", async () => {
       const { data: profile, error } = await supabaseServer
         .from("profiles")
         .select("*")
@@ -183,7 +194,7 @@ class SupabaseDatabase {
   async createUser(
     email: string,
     username: string,
-    password: string
+    password: string,
   ): Promise<User> {
     // Check if email already exists
     const existingUserByEmail = await this.getUserByEmail(email);
@@ -227,7 +238,7 @@ class SupabaseDatabase {
 
   async authenticateUser(
     emailOrUsername: string,
-    password: string
+    password: string,
   ): Promise<User> {
     let email: string;
 
@@ -277,7 +288,7 @@ class SupabaseDatabase {
   }
 
   async getUserById(id: string): Promise<User | null> {
-    return this.monitorDbOperation('getUserById', async () => {
+    return this.monitorDbOperation("getUserById", async () => {
       const { data: profile, error } = await supabaseServer
         .from("profiles")
         .select("*")
@@ -300,9 +311,9 @@ class SupabaseDatabase {
   // Audio clip methods - NOW ACCEPT ACCESS TOKEN
   async createAudioClip(
     clip: Omit<SupabaseAudioClip, "id" | "createdAt" | "updatedAt">,
-    accessToken?: string
+    accessToken?: string,
   ): Promise<AudioClip> {
-    return this.monitorDbOperation('createAudioClip', async () => {
+    return this.monitorDbOperation("createAudioClip", async () => {
       const client = this.getAuthenticatedClient(accessToken);
       const dbClip = convertAudioClipToDb(clip);
 
@@ -315,15 +326,18 @@ class SupabaseDatabase {
         // Verify token using standard client (no custom storage)
         const { user, error: userError } = await verifyAccessToken(accessToken);
         if (userError || !user) {
-          console.error("❌ Cannot verify user with token:", userError?.message);
+          console.error(
+            "❌ Cannot verify user with token:",
+            userError?.message,
+          );
           throw new Error(
-            `Authentication failed: ${userError?.message || "User not found"}`
+            `Authentication failed: ${userError?.message || "User not found"}`,
           );
         }
         if (user.id !== clip.uploadedBy) {
           console.error("❌ User ID mismatch:", user.id, "vs", clip.uploadedBy);
           throw new Error(
-            "User ID mismatch - cannot create clip for different user"
+            "User ID mismatch - cannot create clip for different user",
           );
         }
         console.log("✅ Verified user ID matches:", user.id);
@@ -366,53 +380,53 @@ class SupabaseDatabase {
     filters?: AudioFilters,
     sort?: AudioSort,
     limit?: number,
-    accessToken?: string
+    accessToken?: string,
   ): Promise<AudioClip[]> {
-    return this.monitorDbOperation('getAudioClips', async () => {
+    return this.monitorDbOperation("getAudioClips", async () => {
       const client = this.getAuthenticatedClient(accessToken);
       // Note: Using select("*") because we need all columns for conversion
-      // Ensure database has indexes on: language, speaker_gender, speaker_age_range, 
+      // Ensure database has indexes on: language, speaker_gender, speaker_age_range,
       // speaker_dialect, uploaded_by, created_at, and tags (GIN index for array operations)
       let query = client.from("audio_clips").select("*");
 
-    // Apply filters (order matters for query optimization - most selective first)
-    if (filters) {
-      // Single-value filters (most selective)
-      if (filters.uploadedBy) {
-        query = query.eq("uploaded_by", filters.uploadedBy);
+      // Apply filters (order matters for query optimization - most selective first)
+      if (filters) {
+        // Single-value filters (most selective)
+        if (filters.uploadedBy) {
+          query = query.eq("uploaded_by", filters.uploadedBy);
+        }
+        if (filters.language) {
+          query = query.eq("language", filters.language);
+        }
+        if (filters.speakerGender) {
+          query = query.eq("speaker_gender", filters.speakerGender);
+        }
+        if (filters.speakerAgeRange) {
+          query = query.eq("speaker_age_range", filters.speakerAgeRange);
+        }
+        if (filters.speakerDialect) {
+          query = query.eq("speaker_dialect", filters.speakerDialect);
+        }
+        // Array filter (less selective, apply last)
+        if (filters.tags && filters.tags.length > 0) {
+          // Use overlap operator for array tags (requires GIN index on tags column)
+          query = query.overlaps("tags", filters.tags);
+        }
       }
-      if (filters.language) {
-        query = query.eq("language", filters.language);
-      }
-      if (filters.speakerGender) {
-        query = query.eq("speaker_gender", filters.speakerGender);
-      }
-      if (filters.speakerAgeRange) {
-        query = query.eq("speaker_age_range", filters.speakerAgeRange);
-      }
-      if (filters.speakerDialect) {
-        query = query.eq("speaker_dialect", filters.speakerDialect);
-      }
-      // Array filter (less selective, apply last)
-      if (filters.tags && filters.tags.length > 0) {
-        // Use overlap operator for array tags (requires GIN index on tags column)
-        query = query.overlaps("tags", filters.tags);
-      }
-    }
 
-    // Apply sorting (ensure index exists on sort column)
-    if (sort) {
-      const column = sort.field === "createdAt" ? "created_at" : sort.field;
-      query = query.order(column, { ascending: sort.direction === "asc" });
-    } else {
-      // Default sort by created_at (should have index)
-      query = query.order("created_at", { ascending: false });
-    }
+      // Apply sorting (ensure index exists on sort column)
+      if (sort) {
+        const column = sort.field === "createdAt" ? "created_at" : sort.field;
+        query = query.order(column, { ascending: sort.direction === "asc" });
+      } else {
+        // Default sort by created_at (should have index)
+        query = query.order("created_at", { ascending: false });
+      }
 
-    // Apply limit to reduce data transfer
-    if (limit) {
-      query = query.limit(limit);
-    }
+      // Apply limit to reduce data transfer
+      if (limit) {
+        query = query.limit(limit);
+      }
 
       const { data, error } = await query;
 
@@ -441,9 +455,9 @@ class SupabaseDatabase {
 
   async getAudioClipById(
     id: string,
-    accessToken?: string
+    accessToken?: string,
   ): Promise<AudioClip | null> {
-    return this.monitorDbOperation('getAudioClipById', async () => {
+    return this.monitorDbOperation("getAudioClipById", async () => {
       const client = this.getAuthenticatedClient(accessToken);
 
       const { data, error } = await client
@@ -475,7 +489,7 @@ class SupabaseDatabase {
   async deleteAudioClip(
     id: string,
     userId: string,
-    accessToken?: string
+    accessToken?: string,
   ): Promise<boolean> {
     const client = this.getAuthenticatedClient(accessToken);
 
@@ -518,7 +532,7 @@ class SupabaseDatabase {
         deleteError.code === "PGRST301"
       ) {
         throw new Error(
-          `Database permission error (RLS policy may be blocking admin operations): ${deleteError.message}`
+          `Database permission error (RLS policy may be blocking admin operations): ${deleteError.message}`,
         );
       }
       throw new Error(`Failed to delete clip: ${deleteError.message}`);
@@ -528,7 +542,7 @@ class SupabaseDatabase {
     if (!deleteData || deleteData.length === 0) {
       console.warn("Delete operation returned no deleted rows");
       throw new Error(
-        "No rows were deleted - clip may not exist or you may not have permission"
+        "No rows were deleted - clip may not exist or you may not have permission",
       );
     }
 
@@ -549,7 +563,7 @@ class SupabaseDatabase {
     id: string,
     updates: Partial<Pick<AudioClip, "title" | "metadata">>,
     accessToken?: string,
-    userId?: string
+    userId?: string,
   ): Promise<AudioClip | null> {
     const client = this.getAuthenticatedClient(accessToken);
 
@@ -637,7 +651,7 @@ class SupabaseDatabase {
         error.code === "PGRST301"
       ) {
         throw new Error(
-          `Database permission error (RLS policy may be blocking admin operations): ${error.message}`
+          `Database permission error (RLS policy may be blocking admin operations): ${error.message}`,
         );
       }
       return null;
@@ -667,7 +681,7 @@ class SupabaseDatabase {
   async starClip(
     clipId: string,
     userId: string,
-    accessToken?: string
+    accessToken?: string,
   ): Promise<boolean> {
     const client = this.getAuthenticatedClient(accessToken);
 
@@ -691,7 +705,7 @@ class SupabaseDatabase {
   async unstarClip(
     clipId: string,
     userId: string,
-    accessToken?: string
+    accessToken?: string,
   ): Promise<boolean> {
     const client = this.getAuthenticatedClient(accessToken);
 
@@ -719,8 +733,15 @@ class SupabaseDatabase {
 
       if (error) {
         // If it's a connection/timeout error, return empty array instead of throwing
-        if (error.message?.includes("fetch failed") || error.message?.includes("timeout") || error.message?.includes("ECONNREFUSED")) {
-          console.warn(`Connection error getting stars for clip ${clipId}:`, error.message);
+        if (
+          error.message?.includes("fetch failed") ||
+          error.message?.includes("timeout") ||
+          error.message?.includes("ECONNREFUSED")
+        ) {
+          console.warn(
+            `Connection error getting stars for clip ${clipId}:`,
+            error.message,
+          );
           return [];
         }
         throw new Error(`Failed to get clip stars: ${error.message}`);
@@ -729,8 +750,16 @@ class SupabaseDatabase {
       return data.map((star) => star.user_id);
     } catch (error: any) {
       // Handle connection errors gracefully
-      if (error?.message?.includes("fetch failed") || error?.message?.includes("timeout") || error?.message?.includes("ECONNREFUSED") || error?.code === "UND_ERR_CONNECT_TIMEOUT") {
-        console.warn(`Connection error getting stars for clip ${clipId}:`, error.message);
+      if (
+        error?.message?.includes("fetch failed") ||
+        error?.message?.includes("timeout") ||
+        error?.message?.includes("ECONNREFUSED") ||
+        error?.code === "UND_ERR_CONNECT_TIMEOUT"
+      ) {
+        console.warn(
+          `Connection error getting stars for clip ${clipId}:`,
+          error.message,
+        );
         return [];
       }
       throw error;
@@ -739,7 +768,7 @@ class SupabaseDatabase {
 
   async getUserStarredClips(
     userId: string,
-    accessToken?: string
+    accessToken?: string,
   ): Promise<string[]> {
     const client = this.getAuthenticatedClient(accessToken);
 
@@ -758,9 +787,9 @@ class SupabaseDatabase {
   // Batch methods for efficient querying
   async getClipStarsBatch(
     clipIds: string[],
-    accessToken?: string
+    accessToken?: string,
   ): Promise<Map<string, string[]>> {
-    return this.monitorDbOperation('getClipStarsBatch', async () => {
+    return this.monitorDbOperation("getClipStarsBatch", async () => {
       if (clipIds.length === 0) {
         return new Map();
       }
@@ -775,8 +804,15 @@ class SupabaseDatabase {
 
         if (error) {
           // If it's a connection/timeout error, return empty map instead of throwing
-          if (error.message?.includes("fetch failed") || error.message?.includes("timeout") || error.message?.includes("ECONNREFUSED")) {
-            console.warn(`Connection error getting stars batch:`, error.message);
+          if (
+            error.message?.includes("fetch failed") ||
+            error.message?.includes("timeout") ||
+            error.message?.includes("ECONNREFUSED")
+          ) {
+            console.warn(
+              `Connection error getting stars batch:`,
+              error.message,
+            );
             return new Map();
           }
           throw new Error(`Failed to get clip stars batch: ${error.message}`);
@@ -799,7 +835,12 @@ class SupabaseDatabase {
         return starsMap;
       } catch (error: any) {
         // Handle connection errors gracefully
-        if (error?.message?.includes("fetch failed") || error?.message?.includes("timeout") || error?.message?.includes("ECONNREFUSED") || error?.code === "UND_ERR_CONNECT_TIMEOUT") {
+        if (
+          error?.message?.includes("fetch failed") ||
+          error?.message?.includes("timeout") ||
+          error?.message?.includes("ECONNREFUSED") ||
+          error?.code === "UND_ERR_CONNECT_TIMEOUT"
+        ) {
           console.warn(`Connection error getting stars batch:`, error.message);
           return new Map();
         }
@@ -813,9 +854,9 @@ class SupabaseDatabase {
     clipId: string,
     userId: string,
     rating: number,
-    accessToken?: string
+    accessToken?: string,
   ): Promise<boolean> {
-    return this.monitorDbOperation('rateClipDifficulty', async () => {
+    return this.monitorDbOperation("rateClipDifficulty", async () => {
       const client = this.getAuthenticatedClient(accessToken);
 
       // Validate rating
@@ -824,18 +865,16 @@ class SupabaseDatabase {
       }
 
       // Use upsert to update if exists, insert if not
-      const { error } = await client
-        .from("clip_difficulty_ratings")
-        .upsert(
-          {
-            clip_id: clipId,
-            user_id: userId,
-            rating: rating,
-          },
-          {
-            onConflict: "clip_id,user_id",
-          }
-        );
+      const { error } = await client.from("clip_difficulty_ratings").upsert(
+        {
+          clip_id: clipId,
+          user_id: userId,
+          rating: rating,
+        },
+        {
+          onConflict: "clip_id,user_id",
+        },
+      );
 
       if (error) {
         throw new Error(`Failed to rate clip difficulty: ${error.message}`);
@@ -848,9 +887,9 @@ class SupabaseDatabase {
   async removeDifficultyRating(
     clipId: string,
     userId: string,
-    accessToken?: string
+    accessToken?: string,
   ): Promise<boolean> {
-    return this.monitorDbOperation('removeDifficultyRating', async () => {
+    return this.monitorDbOperation("removeDifficultyRating", async () => {
       const client = this.getAuthenticatedClient(accessToken);
 
       const { error } = await client
@@ -869,9 +908,13 @@ class SupabaseDatabase {
 
   async getClipDifficultyRating(
     clipId: string,
-    accessToken?: string
-  ): Promise<{ average: number | null; count: number; userRating: number | null }> {
-    return this.monitorDbOperation('getClipDifficultyRating', async () => {
+    accessToken?: string,
+  ): Promise<{
+    average: number | null;
+    count: number;
+    userRating: number | null;
+  }> {
+    return this.monitorDbOperation("getClipDifficultyRating", async () => {
       try {
         const client = this.getAuthenticatedClient(accessToken);
 
@@ -882,11 +925,18 @@ class SupabaseDatabase {
 
         // If table doesn't exist (migration not run), return defaults
         if (error) {
-          if (error.message?.includes("does not exist") || error.code === "42P01") {
-            console.warn("clip_difficulty_ratings table does not exist. Migration may not have been run.");
+          if (
+            error.message?.includes("does not exist") ||
+            error.code === "42P01"
+          ) {
+            console.warn(
+              "clip_difficulty_ratings table does not exist. Migration may not have been run.",
+            );
             return { average: null, count: 0, userRating: null };
           }
-          throw new Error(`Failed to get clip difficulty rating: ${error.message}`);
+          throw new Error(
+            `Failed to get clip difficulty rating: ${error.message}`,
+          );
         }
 
         if (!data || data.length === 0) {
@@ -913,13 +963,26 @@ class SupabaseDatabase {
         };
       } catch (error: any) {
         // Fallback for any unexpected errors (table doesn't exist, connection issues, etc.)
-        if (error?.message?.includes("does not exist") || error?.code === "42P01") {
-          console.warn("clip_difficulty_ratings table does not exist. Migration may not have been run.");
+        if (
+          error?.message?.includes("does not exist") ||
+          error?.code === "42P01"
+        ) {
+          console.warn(
+            "clip_difficulty_ratings table does not exist. Migration may not have been run.",
+          );
           return { average: null, count: 0, userRating: null };
         }
         // Handle connection errors gracefully
-        if (error?.message?.includes("fetch failed") || error?.message?.includes("timeout") || error?.message?.includes("ECONNREFUSED") || error?.code === "UND_ERR_CONNECT_TIMEOUT") {
-          console.warn("Connection error getting difficulty rating:", error.message);
+        if (
+          error?.message?.includes("fetch failed") ||
+          error?.message?.includes("timeout") ||
+          error?.message?.includes("ECONNREFUSED") ||
+          error?.code === "UND_ERR_CONNECT_TIMEOUT"
+        ) {
+          console.warn(
+            "Connection error getting difficulty rating:",
+            error.message,
+          );
           return { average: null, count: 0, userRating: null };
         }
         throw error;
@@ -929,108 +992,170 @@ class SupabaseDatabase {
 
   async getClipDifficultyRatingsBatch(
     clipIds: string[],
-    accessToken?: string
-  ): Promise<Map<string, { average: number | null; count: number; userRating: number | null }>> {
-    return this.monitorDbOperation('getClipDifficultyRatingsBatch', async () => {
-      if (clipIds.length === 0) {
-        return new Map();
-      }
+    accessToken?: string,
+  ): Promise<
+    Map<
+      string,
+      { average: number | null; count: number; userRating: number | null }
+    >
+  > {
+    return this.monitorDbOperation(
+      "getClipDifficultyRatingsBatch",
+      async () => {
+        if (clipIds.length === 0) {
+          return new Map();
+        }
 
-      try {
-        const client = this.getAuthenticatedClient(accessToken);
+        try {
+          const client = this.getAuthenticatedClient(accessToken);
 
-        const { data, error } = await client
-          .from("clip_difficulty_ratings")
-          .select("clip_id, rating, user_id")
-          .in("clip_id", clipIds);
+          const { data, error } = await client
+            .from("clip_difficulty_ratings")
+            .select("clip_id, rating, user_id")
+            .in("clip_id", clipIds);
 
-        // If table doesn't exist (migration not run), return defaults
-        if (error) {
-          if (error.message?.includes("does not exist") || error.code === "42P01") {
-            console.warn("clip_difficulty_ratings table does not exist. Migration may not have been run.");
+          // If table doesn't exist (migration not run), return defaults
+          if (error) {
+            if (
+              error.message?.includes("does not exist") ||
+              error.code === "42P01"
+            ) {
+              console.warn(
+                "clip_difficulty_ratings table does not exist. Migration may not have been run.",
+              );
+              const defaultMap = new Map();
+              for (const clipId of clipIds) {
+                defaultMap.set(clipId, {
+                  average: null,
+                  count: 0,
+                  userRating: null,
+                });
+              }
+              return defaultMap;
+            }
+            // Handle connection errors gracefully
+            if (
+              error.message?.includes("fetch failed") ||
+              error.message?.includes("timeout") ||
+              error.message?.includes("ECONNREFUSED")
+            ) {
+              console.warn(
+                "Connection error getting difficulty ratings batch:",
+                error.message,
+              );
+              const defaultMap = new Map();
+              for (const clipId of clipIds) {
+                defaultMap.set(clipId, {
+                  average: null,
+                  count: 0,
+                  userRating: null,
+                });
+              }
+              return defaultMap;
+            }
+            throw new Error(
+              `Failed to get clip difficulty ratings batch: ${error.message}`,
+            );
+          }
+
+          // Get user ID if authenticated
+          let userId: string | null = null;
+          if (accessToken) {
+            const { user } = await verifyAccessToken(accessToken);
+            userId = user?.id || null;
+          }
+
+          // Group by clip_id
+          const ratingsMap = new Map<
+            string,
+            { average: number | null; count: number; userRating: number | null }
+          >();
+
+          // Initialize all clipIds with defaults
+          for (const clipId of clipIds) {
+            ratingsMap.set(clipId, {
+              average: null,
+              count: 0,
+              userRating: null,
+            });
+          }
+
+          // Group ratings by clip_id
+          const ratingsByClip = new Map<
+            string,
+            Array<{ rating: number; user_id: string }>
+          >();
+          if (data) {
+            for (const rating of data) {
+              const existing = ratingsByClip.get(rating.clip_id) || [];
+              existing.push({ rating: rating.rating, user_id: rating.user_id });
+              ratingsByClip.set(rating.clip_id, existing);
+            }
+          }
+
+          // Calculate averages and user ratings
+          for (const [clipId, ratings] of ratingsByClip.entries()) {
+            if (ratings.length === 0) continue;
+
+            const ratingValues = ratings.map((r) => r.rating);
+            const average =
+              ratingValues.reduce((sum, r) => sum + r, 0) / ratingValues.length;
+            const userRating = userId
+              ? ratings.find((r) => r.user_id === userId)?.rating || null
+              : null;
+
+            ratingsMap.set(clipId, {
+              average: Math.round(average * 10) / 10, // Round to 1 decimal
+              count: ratings.length,
+              userRating: userRating || null,
+            });
+          }
+
+          return ratingsMap;
+        } catch (error: any) {
+          // Fallback for any unexpected errors (table doesn't exist, connection issues, etc.)
+          if (
+            error?.message?.includes("does not exist") ||
+            error?.code === "42P01"
+          ) {
+            console.warn(
+              "clip_difficulty_ratings table does not exist. Migration may not have been run.",
+            );
             const defaultMap = new Map();
             for (const clipId of clipIds) {
-              defaultMap.set(clipId, { average: null, count: 0, userRating: null });
+              defaultMap.set(clipId, {
+                average: null,
+                count: 0,
+                userRating: null,
+              });
             }
             return defaultMap;
           }
           // Handle connection errors gracefully
-          if (error.message?.includes("fetch failed") || error.message?.includes("timeout") || error.message?.includes("ECONNREFUSED")) {
-            console.warn("Connection error getting difficulty ratings batch:", error.message);
+          if (
+            error?.message?.includes("fetch failed") ||
+            error?.message?.includes("timeout") ||
+            error?.message?.includes("ECONNREFUSED") ||
+            error?.code === "UND_ERR_CONNECT_TIMEOUT"
+          ) {
+            console.warn(
+              "Connection error getting difficulty ratings batch:",
+              error.message,
+            );
             const defaultMap = new Map();
             for (const clipId of clipIds) {
-              defaultMap.set(clipId, { average: null, count: 0, userRating: null });
+              defaultMap.set(clipId, {
+                average: null,
+                count: 0,
+                userRating: null,
+              });
             }
             return defaultMap;
           }
-          throw new Error(`Failed to get clip difficulty ratings batch: ${error.message}`);
+          throw error;
         }
-
-        // Get user ID if authenticated
-        let userId: string | null = null;
-        if (accessToken) {
-          const { user } = await verifyAccessToken(accessToken);
-          userId = user?.id || null;
-        }
-
-        // Group by clip_id
-        const ratingsMap = new Map<string, { average: number | null; count: number; userRating: number | null }>();
-        
-        // Initialize all clipIds with defaults
-        for (const clipId of clipIds) {
-          ratingsMap.set(clipId, { average: null, count: 0, userRating: null });
-        }
-
-        // Group ratings by clip_id
-        const ratingsByClip = new Map<string, Array<{ rating: number; user_id: string }>>();
-        if (data) {
-          for (const rating of data) {
-            const existing = ratingsByClip.get(rating.clip_id) || [];
-            existing.push({ rating: rating.rating, user_id: rating.user_id });
-            ratingsByClip.set(rating.clip_id, existing);
-          }
-        }
-
-        // Calculate averages and user ratings
-        for (const [clipId, ratings] of ratingsByClip.entries()) {
-          if (ratings.length === 0) continue;
-
-          const ratingValues = ratings.map((r) => r.rating);
-          const average = ratingValues.reduce((sum, r) => sum + r, 0) / ratingValues.length;
-          const userRating = userId
-            ? ratings.find((r) => r.user_id === userId)?.rating || null
-            : null;
-
-          ratingsMap.set(clipId, {
-            average: Math.round(average * 10) / 10, // Round to 1 decimal
-            count: ratings.length,
-            userRating: userRating || null,
-          });
-        }
-
-        return ratingsMap;
-      } catch (error: any) {
-        // Fallback for any unexpected errors (table doesn't exist, connection issues, etc.)
-        if (error?.message?.includes("does not exist") || error?.code === "42P01") {
-          console.warn("clip_difficulty_ratings table does not exist. Migration may not have been run.");
-          const defaultMap = new Map();
-          for (const clipId of clipIds) {
-            defaultMap.set(clipId, { average: null, count: 0, userRating: null });
-          }
-          return defaultMap;
-        }
-        // Handle connection errors gracefully
-        if (error?.message?.includes("fetch failed") || error?.message?.includes("timeout") || error?.message?.includes("ECONNREFUSED") || error?.code === "UND_ERR_CONNECT_TIMEOUT") {
-          console.warn("Connection error getting difficulty ratings batch:", error.message);
-          const defaultMap = new Map();
-          for (const clipId of clipIds) {
-            defaultMap.set(clipId, { average: null, count: 0, userRating: null });
-          }
-          return defaultMap;
-        }
-        throw error;
-      }
-    });
+      },
+    );
   }
 
   // Vote methods
@@ -1038,24 +1163,22 @@ class SupabaseDatabase {
     clipId: string,
     userId: string,
     voteType: "up" | "down",
-    accessToken?: string
+    accessToken?: string,
   ): Promise<boolean> {
-    return this.monitorDbOperation('voteClip', async () => {
+    return this.monitorDbOperation("voteClip", async () => {
       const client = this.getAuthenticatedClient(accessToken);
 
       // Use upsert to update if exists, insert if not
-      const { error } = await client
-        .from("clip_votes")
-        .upsert(
-          {
-            clip_id: clipId,
-            user_id: userId,
-            vote_type: voteType,
-          },
-          {
-            onConflict: "clip_id,user_id",
-          }
-        );
+      const { error } = await client.from("clip_votes").upsert(
+        {
+          clip_id: clipId,
+          user_id: userId,
+          vote_type: voteType,
+        },
+        {
+          onConflict: "clip_id,user_id",
+        },
+      );
 
       if (error) {
         throw new Error(`Failed to vote clip: ${error.message}`);
@@ -1068,9 +1191,9 @@ class SupabaseDatabase {
   async removeClipVote(
     clipId: string,
     userId: string,
-    accessToken?: string
+    accessToken?: string,
   ): Promise<boolean> {
-    return this.monitorDbOperation('removeClipVote', async () => {
+    return this.monitorDbOperation("removeClipVote", async () => {
       const client = this.getAuthenticatedClient(accessToken);
 
       const { error } = await client
@@ -1089,9 +1212,14 @@ class SupabaseDatabase {
 
   async getClipVotes(
     clipId: string,
-    accessToken?: string
-  ): Promise<{ upvoteCount: number; downvoteCount: number; voteScore: number; userVote: "up" | "down" | null }> {
-    return this.monitorDbOperation('getClipVotes', async () => {
+    accessToken?: string,
+  ): Promise<{
+    upvoteCount: number;
+    downvoteCount: number;
+    voteScore: number;
+    userVote: "up" | "down" | null;
+  }> {
+    return this.monitorDbOperation("getClipVotes", async () => {
       try {
         const client = this.getAuthenticatedClient(accessToken);
 
@@ -1102,9 +1230,19 @@ class SupabaseDatabase {
 
         // If table doesn't exist (migration not run), return defaults
         if (error) {
-          if (error.message?.includes("does not exist") || error.code === "42P01") {
-            console.warn("clip_votes table does not exist. Migration may not have been run.");
-            return { upvoteCount: 0, downvoteCount: 0, voteScore: 0, userVote: null };
+          if (
+            error.message?.includes("does not exist") ||
+            error.code === "42P01"
+          ) {
+            console.warn(
+              "clip_votes table does not exist. Migration may not have been run.",
+            );
+            return {
+              upvoteCount: 0,
+              downvoteCount: 0,
+              voteScore: 0,
+              userVote: null,
+            };
           }
           throw new Error(`Failed to get clip votes: ${error.message}`);
         }
@@ -1120,7 +1258,10 @@ class SupabaseDatabase {
         const downvoteCount = data.filter((v) => v.vote_type === "down").length;
         const voteScore = upvoteCount - downvoteCount;
         const userVote = userId
-          ? (data.find((v) => v.user_id === userId)?.vote_type as "up" | "down" | null) || null
+          ? (data.find((v) => v.user_id === userId)?.vote_type as
+              | "up"
+              | "down"
+              | null) || null
           : null;
 
         return {
@@ -1131,14 +1272,34 @@ class SupabaseDatabase {
         };
       } catch (error: any) {
         // Fallback for any unexpected errors (table doesn't exist, connection issues, etc.)
-        if (error?.message?.includes("does not exist") || error?.code === "42P01") {
-          console.warn("clip_votes table does not exist. Migration may not have been run.");
-          return { upvoteCount: 0, downvoteCount: 0, voteScore: 0, userVote: null };
+        if (
+          error?.message?.includes("does not exist") ||
+          error?.code === "42P01"
+        ) {
+          console.warn(
+            "clip_votes table does not exist. Migration may not have been run.",
+          );
+          return {
+            upvoteCount: 0,
+            downvoteCount: 0,
+            voteScore: 0,
+            userVote: null,
+          };
         }
         // Handle connection errors gracefully
-        if (error?.message?.includes("fetch failed") || error?.message?.includes("timeout") || error?.message?.includes("ECONNREFUSED") || error?.code === "UND_ERR_CONNECT_TIMEOUT") {
+        if (
+          error?.message?.includes("fetch failed") ||
+          error?.message?.includes("timeout") ||
+          error?.message?.includes("ECONNREFUSED") ||
+          error?.code === "UND_ERR_CONNECT_TIMEOUT"
+        ) {
           console.warn("Connection error getting votes:", error.message);
-          return { upvoteCount: 0, downvoteCount: 0, voteScore: 0, userVote: null };
+          return {
+            upvoteCount: 0,
+            downvoteCount: 0,
+            voteScore: 0,
+            userVote: null,
+          };
         }
         throw error;
       }
@@ -1147,9 +1308,19 @@ class SupabaseDatabase {
 
   async getClipVotesBatch(
     clipIds: string[],
-    accessToken?: string
-  ): Promise<Map<string, { upvoteCount: number; downvoteCount: number; voteScore: number; userVote: "up" | "down" | null }>> {
-    return this.monitorDbOperation('getClipVotesBatch', async () => {
+    accessToken?: string,
+  ): Promise<
+    Map<
+      string,
+      {
+        upvoteCount: number;
+        downvoteCount: number;
+        voteScore: number;
+        userVote: "up" | "down" | null;
+      }
+    >
+  > {
+    return this.monitorDbOperation("getClipVotesBatch", async () => {
       if (clipIds.length === 0) {
         return new Map();
       }
@@ -1164,20 +1335,42 @@ class SupabaseDatabase {
 
         // If table doesn't exist (migration not run), return defaults
         if (error) {
-          if (error.message?.includes("does not exist") || error.code === "42P01") {
-            console.warn("clip_votes table does not exist. Migration may not have been run.");
+          if (
+            error.message?.includes("does not exist") ||
+            error.code === "42P01"
+          ) {
+            console.warn(
+              "clip_votes table does not exist. Migration may not have been run.",
+            );
             const defaultMap = new Map();
             for (const clipId of clipIds) {
-              defaultMap.set(clipId, { upvoteCount: 0, downvoteCount: 0, voteScore: 0, userVote: null });
+              defaultMap.set(clipId, {
+                upvoteCount: 0,
+                downvoteCount: 0,
+                voteScore: 0,
+                userVote: null,
+              });
             }
             return defaultMap;
           }
           // Handle connection errors gracefully
-          if (error.message?.includes("fetch failed") || error.message?.includes("timeout") || error.message?.includes("ECONNREFUSED")) {
-            console.warn("Connection error getting votes batch:", error.message);
+          if (
+            error.message?.includes("fetch failed") ||
+            error.message?.includes("timeout") ||
+            error.message?.includes("ECONNREFUSED")
+          ) {
+            console.warn(
+              "Connection error getting votes batch:",
+              error.message,
+            );
             const defaultMap = new Map();
             for (const clipId of clipIds) {
-              defaultMap.set(clipId, { upvoteCount: 0, downvoteCount: 0, voteScore: 0, userVote: null });
+              defaultMap.set(clipId, {
+                upvoteCount: 0,
+                downvoteCount: 0,
+                voteScore: 0,
+                userVote: null,
+              });
             }
             return defaultMap;
           }
@@ -1192,13 +1385,29 @@ class SupabaseDatabase {
         }
 
         // Initialize all clipIds with defaults
-        const votesMap = new Map<string, { upvoteCount: number; downvoteCount: number; voteScore: number; userVote: "up" | "down" | null }>();
+        const votesMap = new Map<
+          string,
+          {
+            upvoteCount: number;
+            downvoteCount: number;
+            voteScore: number;
+            userVote: "up" | "down" | null;
+          }
+        >();
         for (const clipId of clipIds) {
-          votesMap.set(clipId, { upvoteCount: 0, downvoteCount: 0, voteScore: 0, userVote: null });
+          votesMap.set(clipId, {
+            upvoteCount: 0,
+            downvoteCount: 0,
+            voteScore: 0,
+            userVote: null,
+          });
         }
 
         // Group votes by clip_id
-        const votesByClip = new Map<string, Array<{ vote_type: string; user_id: string }>>();
+        const votesByClip = new Map<
+          string,
+          Array<{ vote_type: string; user_id: string }>
+        >();
         if (data) {
           for (const vote of data) {
             const existing = votesByClip.get(vote.clip_id) || [];
@@ -1210,10 +1419,15 @@ class SupabaseDatabase {
         // Calculate vote counts and user votes
         for (const [clipId, votes] of votesByClip.entries()) {
           const upvoteCount = votes.filter((v) => v.vote_type === "up").length;
-          const downvoteCount = votes.filter((v) => v.vote_type === "down").length;
+          const downvoteCount = votes.filter(
+            (v) => v.vote_type === "down",
+          ).length;
           const voteScore = upvoteCount - downvoteCount;
           const userVote = userId
-            ? (votes.find((v) => v.user_id === userId)?.vote_type as "up" | "down" | null) || null
+            ? (votes.find((v) => v.user_id === userId)?.vote_type as
+                | "up"
+                | "down"
+                | null) || null
             : null;
 
           votesMap.set(clipId, {
@@ -1227,20 +1441,40 @@ class SupabaseDatabase {
         return votesMap;
       } catch (error: any) {
         // Fallback for any unexpected errors (table doesn't exist, connection issues, etc.)
-        if (error?.message?.includes("does not exist") || error?.code === "42P01") {
-          console.warn("clip_votes table does not exist. Migration may not have been run.");
+        if (
+          error?.message?.includes("does not exist") ||
+          error?.code === "42P01"
+        ) {
+          console.warn(
+            "clip_votes table does not exist. Migration may not have been run.",
+          );
           const defaultMap = new Map();
           for (const clipId of clipIds) {
-            defaultMap.set(clipId, { upvoteCount: 0, downvoteCount: 0, voteScore: 0, userVote: null });
+            defaultMap.set(clipId, {
+              upvoteCount: 0,
+              downvoteCount: 0,
+              voteScore: 0,
+              userVote: null,
+            });
           }
           return defaultMap;
         }
         // Handle connection errors gracefully
-        if (error?.message?.includes("fetch failed") || error?.message?.includes("timeout") || error?.message?.includes("ECONNREFUSED") || error?.code === "UND_ERR_CONNECT_TIMEOUT") {
+        if (
+          error?.message?.includes("fetch failed") ||
+          error?.message?.includes("timeout") ||
+          error?.message?.includes("ECONNREFUSED") ||
+          error?.code === "UND_ERR_CONNECT_TIMEOUT"
+        ) {
           console.warn("Connection error getting votes batch:", error.message);
           const defaultMap = new Map();
           for (const clipId of clipIds) {
-            defaultMap.set(clipId, { upvoteCount: 0, downvoteCount: 0, voteScore: 0, userVote: null });
+            defaultMap.set(clipId, {
+              upvoteCount: 0,
+              downvoteCount: 0,
+              voteScore: 0,
+              userVote: null,
+            });
           }
           return defaultMap;
         }
@@ -1256,12 +1490,19 @@ class SupabaseDatabase {
     }
 
     // Count only alphanumeric characters (exclude spaces, punctuation)
-    const alphanumericChars = clip.metadata.transcript.replace(/[^a-zA-Z0-9]/g, "").length;
+    const alphanumericChars = clip.metadata.transcript.replace(
+      /[^a-zA-Z0-9]/g,
+      "",
+    ).length;
     return alphanumericChars / clip.duration;
   }
 
   // Helper: Calculate speed percentiles
-  getSpeedPercentiles(clips: AudioClip[]): { slow: number; medium: number; fast: number } {
+  getSpeedPercentiles(clips: AudioClip[]): {
+    slow: number;
+    medium: number;
+    fast: number;
+  } {
     const speeds = clips
       .map((clip) => this.calculateCharactersPerSecond(clip))
       .filter((speed): speed is number => speed !== null)
@@ -1284,7 +1525,7 @@ class SupabaseDatabase {
   // User filter preferences methods
   async getUserFilterPreferences(
     userId: string,
-    accessToken?: string
+    accessToken?: string,
   ): Promise<FilterPreferences | null> {
     const client = this.getAuthenticatedClient(accessToken);
 
@@ -1301,11 +1542,18 @@ class SupabaseDatabase {
         return null;
       }
       // If column doesn't exist yet (database migration not run), return null gracefully
-      if (error.message?.includes("does not exist") || error.message?.includes("column")) {
-        console.warn("filter_preferences column does not exist yet. Please run the database migration.");
+      if (
+        error.message?.includes("does not exist") ||
+        error.message?.includes("column")
+      ) {
+        console.warn(
+          "filter_preferences column does not exist yet. Please run the database migration.",
+        );
         return null;
       }
-      throw new Error(`Failed to get user filter preferences: ${error.message}`);
+      throw new Error(
+        `Failed to get user filter preferences: ${error.message}`,
+      );
     }
 
     if (!data || !data.filter_preferences) {
@@ -1329,7 +1577,7 @@ class SupabaseDatabase {
       if (
         preferences.speakerAgeRange &&
         ["teen", "younger-adult", "adult", "senior"].includes(
-          preferences.speakerAgeRange
+          preferences.speakerAgeRange,
         )
       ) {
         result.speakerAgeRange = preferences.speakerAgeRange;
@@ -1346,7 +1594,10 @@ class SupabaseDatabase {
       ) {
         result.speedFilter = preferences.speedFilter;
       }
-      if (preferences.defaultSort && typeof preferences.defaultSort === "object") {
+      if (
+        preferences.defaultSort &&
+        typeof preferences.defaultSort === "object"
+      ) {
         const sort = preferences.defaultSort;
         if (
           sort.field &&
@@ -1372,7 +1623,7 @@ class SupabaseDatabase {
   async saveUserFilterPreferences(
     userId: string,
     preferences: FilterPreferences | null,
-    accessToken?: string
+    accessToken?: string,
   ): Promise<void> {
     const client = this.getAuthenticatedClient(accessToken);
 
@@ -1384,7 +1635,9 @@ class SupabaseDatabase {
         .eq("id", userId);
 
       if (error) {
-        throw new Error(`Failed to save user filter preferences: ${error.message}`);
+        throw new Error(
+          `Failed to save user filter preferences: ${error.message}`,
+        );
       }
       return;
     }
@@ -1421,12 +1674,430 @@ class SupabaseDatabase {
 
     if (error) {
       // If column doesn't exist yet (database migration not run), log warning but don't throw
-      if (error.message?.includes("does not exist") || error.message?.includes("column")) {
-        console.warn("filter_preferences column does not exist yet. Please run the database migration.");
+      if (
+        error.message?.includes("does not exist") ||
+        error.message?.includes("column")
+      ) {
+        console.warn(
+          "filter_preferences column does not exist yet. Please run the database migration.",
+        );
         return; // Silently fail - user needs to run migration
       }
-      throw new Error(`Failed to save user filter preferences: ${error.message}`);
+      throw new Error(
+        `Failed to save user filter preferences: ${error.message}`,
+      );
     }
+  }
+
+  // Stats methods
+  async getUserStats(
+    userId: string,
+    accessToken?: string,
+  ): Promise<{
+    totalChorusingTimeSeconds: number;
+    totalClipsPracticed: number;
+    totalTranscriptionAttempts: number;
+    totalClipsSubmitted: number;
+    languageStats: Record<
+      string,
+      { timeSeconds: number; clipsPracticed: number }
+    >;
+    practiceStreak: number;
+  }> {
+    return this.monitorDbOperation("getUserStats", async () => {
+      const client = this.getAuthenticatedClient(accessToken);
+
+      // Always calculate fresh stats (cache disabled — not needed at conference scale)
+      const [sessionsResult, attemptsResult, clipsResult] = await Promise.all([
+        client
+          .from("clip_sessions")
+          .select("total_time_seconds, language, clip_id")
+          .eq("user_id", userId),
+        client
+          .from("transcription_attempts")
+          .select("id")
+          .eq("user_id", userId),
+        client.from("audio_clips").select("id").eq("uploaded_by", userId),
+      ]);
+
+      const sessions = sessionsResult.data || [];
+      const attempts = attemptsResult.data || [];
+      const clips = clipsResult.data || [];
+
+      // Calculate totals
+      const totalChorusingTimeSeconds = sessions.reduce(
+        (sum, s) => sum + (Number(s.total_time_seconds) || 0),
+        0,
+      );
+      const uniqueClipsPracticed = new Set(sessions.map((s) => s.clip_id)).size;
+      const totalTranscriptionAttempts = attempts.length;
+      const totalClipsSubmitted = clips.length;
+
+      // Calculate per-language stats
+      const languageStats: Record<
+        string,
+        { timeSeconds: number; clipsPracticed: number }
+      > = {};
+      const languageClips = new Map<string, Set<string>>();
+
+      for (const session of sessions) {
+        const lang = session.language || "unknown";
+        const time = Number(session.total_time_seconds) || 0;
+
+        if (!languageStats[lang]) {
+          languageStats[lang] = { timeSeconds: 0, clipsPracticed: 0 };
+          languageClips.set(lang, new Set());
+        }
+
+        languageStats[lang].timeSeconds += time;
+        languageClips.get(lang)!.add(session.clip_id);
+      }
+
+      // Set clips practiced per language
+      for (const [lang, clipSet] of languageClips.entries()) {
+        if (languageStats[lang]) {
+          languageStats[lang].clipsPracticed = clipSet.size;
+        }
+      }
+
+      // Calculate practice streak
+      const practiceStreak = await this.calculatePracticeStreak(userId, client);
+
+      // Update cache
+      const languageStatsJson: any = {};
+      for (const [lang, stats] of Object.entries(languageStats)) {
+        languageStatsJson[lang] = {
+          time_seconds: stats.timeSeconds,
+          clips_practiced: stats.clipsPracticed,
+        };
+      }
+
+      await client
+        .from("user_stats_cache")
+        .upsert({
+          user_id: userId,
+          total_chorusing_time_seconds: totalChorusingTimeSeconds,
+          total_clips_practiced: uniqueClipsPracticed,
+          total_transcription_attempts: totalTranscriptionAttempts,
+          total_clips_submitted: totalClipsSubmitted,
+          language_stats: languageStatsJson,
+          last_updated_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
+
+      return {
+        totalChorusingTimeSeconds,
+        totalClipsPracticed: uniqueClipsPracticed,
+        totalTranscriptionAttempts,
+        totalClipsSubmitted,
+        languageStats,
+        practiceStreak,
+      };
+    });
+  }
+
+  private async calculatePracticeStreak(
+    userId: string,
+    client: any,
+  ): Promise<number> {
+    // Get all sessions grouped by date
+    const { data: sessions } = await client
+      .from("clip_sessions")
+      .select("started_at, total_time_seconds")
+      .eq("user_id", userId)
+      .order("started_at", { ascending: false });
+
+    if (!sessions || sessions.length === 0) return 0;
+
+    // Group by date and check if at least 1 minute was practiced
+    const practiceDays = new Set<string>();
+    for (const session of sessions) {
+      const date = new Date(session.started_at);
+      const dateStr = date.toISOString().split("T")[0];
+      const timeSeconds = Number(session.total_time_seconds) || 0;
+
+      if (timeSeconds >= 60) {
+        // At least 1 minute
+        practiceDays.add(dateStr);
+      }
+    }
+
+    // Calculate consecutive days from today backwards
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    let streak = 0;
+    let currentDate = new Date(today);
+
+    while (true) {
+      const dateStr = currentDate.toISOString().split("T")[0];
+      if (practiceDays.has(dateStr)) {
+        streak++;
+        currentDate.setDate(currentDate.getDate() - 1);
+      } else {
+        break;
+      }
+    }
+
+    return streak;
+  }
+
+  async getClipStats(
+    clipId: string,
+    userId: string,
+    accessToken?: string,
+  ): Promise<{
+    totalTimeSeconds: number;
+    sessionCount: number;
+    totalLoops: number;
+    totalRestarts: number;
+    lastPracticedAt: string | null;
+    transcriptionAttempts: number;
+  }> {
+    return this.monitorDbOperation("getClipStats", async () => {
+      const client = this.getAuthenticatedClient(accessToken);
+
+      const [sessionsResult, attemptsResult] = await Promise.all([
+        client
+          .from("clip_sessions")
+          .select("total_time_seconds, loop_count, restart_count, started_at")
+          .eq("user_id", userId)
+          .eq("clip_id", clipId)
+          .order("started_at", { ascending: false }),
+        client
+          .from("transcription_attempts")
+          .select("id")
+          .eq("user_id", userId)
+          .eq("clip_id", clipId),
+      ]);
+
+      const sessions = sessionsResult.data || [];
+      const attempts = attemptsResult.data || [];
+
+      const totalTimeSeconds = sessions.reduce(
+        (sum, s) => sum + (Number(s.total_time_seconds) || 0),
+        0,
+      );
+      const totalLoops = sessions.reduce(
+        (sum, s) => sum + (s.loop_count || 0),
+        0,
+      );
+      const totalRestarts = sessions.reduce(
+        (sum, s) => sum + (s.restart_count || 0),
+        0,
+      );
+      const lastPracticedAt =
+        sessions.length > 0 ? sessions[0].started_at : null;
+
+      return {
+        totalTimeSeconds,
+        sessionCount: sessions.length,
+        totalLoops,
+        totalRestarts,
+        lastPracticedAt,
+        transcriptionAttempts: attempts.length,
+      };
+    });
+  }
+
+  async getTimeline(
+    userId: string,
+    limit: number = 50,
+    offset: number = 0,
+    accessToken?: string,
+  ): Promise<
+    Array<{
+      clip: SupabaseAudioClip;
+      lastPracticedAt: string;
+      totalTimeSeconds: number;
+      sessionCount: number;
+      totalLoops: number;
+    }>
+  > {
+    return this.monitorDbOperation("getTimeline", async () => {
+      const client = this.getAuthenticatedClient(accessToken);
+
+      // Get distinct clips with their most recent session
+      const { data: sessions, error } = await client
+        .from("clip_sessions")
+        .select(
+          `
+          clip_id,
+          started_at,
+          total_time_seconds,
+          loop_count,
+          audio_clips (
+            id,
+            title,
+            duration,
+            filename,
+            original_filename,
+            file_size,
+            storage_path,
+            language,
+            speaker_gender,
+            speaker_age_range,
+            speaker_dialect,
+            transcript,
+            source_url,
+            tags,
+            uploaded_by,
+            created_at,
+            updated_at
+          )
+        `,
+        )
+        .eq("user_id", userId)
+        .order("started_at", { ascending: false })
+        .limit(limit * 10); // Get more to account for grouping
+
+      if (error) throw error;
+
+      // Group by clip_id and aggregate
+      const clipMap = new Map<
+        string,
+        {
+          clip: any;
+          lastPracticedAt: string;
+          totalTimeSeconds: number;
+          sessionCount: number;
+          totalLoops: number;
+        }
+      >();
+
+      for (const session of sessions || []) {
+        const clipId = session.clip_id;
+        const clip = (session as any).audio_clips;
+
+        if (!clip) continue;
+
+        if (!clipMap.has(clipId)) {
+          clipMap.set(clipId, {
+            clip: convertAudioClipFromDb(clip),
+            lastPracticedAt: session.started_at,
+            totalTimeSeconds: Number(session.total_time_seconds) || 0,
+            sessionCount: 1,
+            totalLoops: session.loop_count || 0,
+          });
+        } else {
+          const existing = clipMap.get(clipId)!;
+          existing.totalTimeSeconds += Number(session.total_time_seconds) || 0;
+          existing.sessionCount += 1;
+          existing.totalLoops += session.loop_count || 0;
+          // Keep the most recent practice date
+          if (
+            new Date(session.started_at) > new Date(existing.lastPracticedAt)
+          ) {
+            existing.lastPracticedAt = session.started_at;
+          }
+        }
+      }
+
+      // Convert to array, sort by last practiced, and limit
+      const result = Array.from(clipMap.values())
+        .sort(
+          (a, b) =>
+            new Date(b.lastPracticedAt).getTime() -
+            new Date(a.lastPracticedAt).getTime(),
+        )
+        .slice(offset, offset + limit);
+
+      return result;
+    });
+  }
+
+  async getContributionStats(
+    userId: string,
+    accessToken?: string,
+  ): Promise<{
+    totalClipsSubmitted: number;
+    totalTimeByOthers: number;
+    popularClips: Array<{
+      clip: SupabaseAudioClip;
+      totalTimeByOthers: number;
+      userCount: number;
+    }>;
+  }> {
+    return this.monitorDbOperation("getContributionStats", async () => {
+      const client = this.getAuthenticatedClient(accessToken);
+
+      // Get all clips uploaded by user
+      const { data: clips, error: clipsError } = await client
+        .from("audio_clips")
+        .select("*")
+        .eq("uploaded_by", userId);
+
+      if (clipsError) throw clipsError;
+
+      const totalClipsSubmitted = clips?.length || 0;
+
+      // Get all sessions for these clips (excluding the creator's own sessions)
+      const clipIds = clips?.map((c) => c.id) || [];
+      if (clipIds.length === 0) {
+        return {
+          totalClipsSubmitted: 0,
+          totalTimeByOthers: 0,
+          popularClips: [],
+        };
+      }
+
+      const { data: sessions, error: sessionsError } = await client
+        .from("clip_sessions")
+        .select("clip_id, total_time_seconds, user_id")
+        .in("clip_id", clipIds)
+        .neq("user_id", userId); // Exclude creator's own sessions
+
+      if (sessionsError) throw sessionsError;
+
+      // Calculate total time by others
+      const totalTimeByOthers = (sessions || []).reduce(
+        (sum, s) => sum + (Number(s.total_time_seconds) || 0),
+        0,
+      );
+
+      // Group by clip and calculate stats
+      const clipStatsMap = new Map<
+        string,
+        {
+          totalTime: number;
+          users: Set<string>;
+        }
+      >();
+
+      for (const session of sessions || []) {
+        const clipId = session.clip_id;
+        if (!clipStatsMap.has(clipId)) {
+          clipStatsMap.set(clipId, {
+            totalTime: 0,
+            users: new Set(),
+          });
+        }
+        const stats = clipStatsMap.get(clipId)!;
+        stats.totalTime += Number(session.total_time_seconds) || 0;
+        stats.users.add(session.user_id);
+      }
+
+      // Build popular clips list
+      const popularClips = Array.from(clipStatsMap.entries())
+        .map(([clipId, stats]) => {
+          const clip = clips?.find((c) => c.id === clipId);
+          if (!clip) return null;
+          return {
+            clip: convertAudioClipFromDb(clip),
+            totalTimeByOthers: stats.totalTime,
+            userCount: stats.users.size,
+          };
+        })
+        .filter((item): item is NonNullable<typeof item> => item !== null)
+        .sort((a, b) => b.totalTimeByOthers - a.totalTimeByOthers)
+        .slice(0, 10); // Top 10
+
+      return {
+        totalClipsSubmitted,
+        totalTimeByOthers,
+        popularClips,
+      };
+    });
   }
 }
 

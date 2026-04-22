@@ -18,6 +18,7 @@ import {
   Minus,
 } from "lucide-react";
 import type { AudioClip } from "@/types/audio";
+import { useClipSessionTracking } from "@/hooks/useClipSessionTracking";
 
 /* ----------  ONE-AND-ONLY global WaveSurfer instance  -------------- */
 let _activeWs: any | null = null;
@@ -55,6 +56,12 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
   // Use refs for loop and region state to avoid stale closures in event handlers
   const loopRef = useRef(false);
   const regionRef = useRef<AudioRegion | null>(null);
+
+  // Track session for stats
+  const { trackLoop, trackRestart } = useClipSessionTracking({
+    clip,
+    isPlaying,
+  });
 
   // Sync refs with state
   useEffect(() => {
@@ -131,8 +138,9 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
           if (mediaElement && !gainNodeRef.current) {
             // Try to create gain node immediately when media element is available
             try {
-              const audioContext = new (window.AudioContext ||
-                (window as any).webkitAudioContext)();
+              const audioContext = new (
+                window.AudioContext || (window as any).webkitAudioContext
+              )();
               const source =
                 audioContext.createMediaElementSource(mediaElement);
               const gainNode = audioContext.createGain();
@@ -181,13 +189,14 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
                     // Check if source node already exists
                     if ((mediaElement as any).__sourceNode) {
                       console.warn(
-                        "Media element already has a source node - cannot create gain node"
+                        "Media element already has a source node - cannot create gain node",
                       );
                       return;
                     }
 
-                    const audioContext = new (window.AudioContext ||
-                      (window as any).webkitAudioContext)();
+                    const audioContext = new (
+                      window.AudioContext || (window as any).webkitAudioContext
+                    )();
                     if (audioContext.state === "suspended") {
                       await audioContext.resume();
                     }
@@ -208,7 +217,7 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
                   } catch (err: any) {
                     console.error(
                       "❌ Failed to create gain node:",
-                      err.message || err
+                      err.message || err,
                     );
                   }
                 };
@@ -229,34 +238,14 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
 
           if (currentLoop) {
             // Loop is enabled - handle looping directly in finish event
-            // Temporarily disable regions to allow seeks
-            const regions = regionsRef.current;
-            let regionsWereEnabled = false;
-            if (regions && typeof regions.disable === "function") {
-              regions.disable();
-              regionsWereEnabled = true;
-            }
+            trackLoop();
 
             try {
               const seekTime = currentRegion ? currentRegion.start : 0;
-              if (dur > 0) {
-                ws.seekTo(seekTime / dur);
-                ws.play();
-                // Don't set isPlaying(false) - keep it playing
-              } else {
-                setIsPlaying(false);
-              }
+              ws.setTime(seekTime);
+              ws.play();
             } catch (err) {
               setIsPlaying(false);
-            }
-
-            // Re-enable regions
-            if (
-              regions &&
-              regionsWereEnabled &&
-              typeof regions.enable === "function"
-            ) {
-              regions.enable();
             }
           } else {
             // Loop is disabled - stop playback
@@ -288,7 +277,7 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
           "region-updated",
           (r: any) =>
             mounted.current &&
-            setRegion({ id: r.id, start: r.start, end: r.end })
+            setRegion({ id: r.id, start: r.start, end: r.end }),
         );
         regions.on("region-removed", () => mounted.current && setRegion(null));
 
@@ -372,32 +361,12 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
     const ws = wsRef.current;
     if (!isReady || !ws) return;
 
-    // CRITICAL: The regions plugin blocks seeks. Temporarily disable it.
-    const regions = regionsRef.current;
-    let regionsWereEnabled = false;
-
-    if (regions && typeof regions.disable === "function") {
-      regions.disable();
-      regionsWereEnabled = true;
-    }
-
     ws.pause();
 
-    const dur = ws.getDuration();
-    if (dur > 0) {
-      // If region is selected, stop at region start; otherwise stop at beginning
-      const seekTime = region ? region.start : 0;
-      ws.seekTo(seekTime / dur);
-      setCurrent(seekTime);
-    } else {
-      ws.stop();
-      setCurrent(0);
-    }
-
-    // Re-enable regions if we disabled them
-    if (regions && regionsWereEnabled && typeof regions.enable === "function") {
-      regions.enable();
-    }
+    // Use setTime for reliable seeking with MediaElement backend
+    const seekTime = region ? region.start : 0;
+    ws.setTime(seekTime);
+    setCurrent(seekTime);
 
     setIsPlaying(false);
   }, [isReady, region]);
@@ -405,6 +374,9 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
   const restart = useCallback(async () => {
     const ws = wsRef.current;
     if (!isReady || !ws) return;
+
+    // Track restart
+    trackRestart();
 
     // Resume audio context if suspended (required for autoplay policy)
     if (
@@ -418,35 +390,16 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
       }
     }
 
-    // CRITICAL: Temporarily disable regions to allow seeks
-    const regions = regionsRef.current;
-    let regionsWereEnabled = false;
-
-    if (regions && typeof regions.disable === "function") {
-      regions.disable();
-      regionsWereEnabled = true;
-    }
-
     ws.pause();
 
-    const dur = ws.getDuration();
-    if (dur > 0) {
-      const seekTime = region ? region.start : 0;
-      ws.seekTo(seekTime / dur);
-      setCurrent(seekTime);
+    // Use setTime for reliable seeking with MediaElement backend
+    const seekTime = region ? region.start : 0;
+    ws.setTime(seekTime);
+    setCurrent(seekTime);
 
-      // Re-enable regions
-      if (
-        regions &&
-        regionsWereEnabled &&
-        typeof regions.enable === "function"
-      ) {
-        regions.enable();
-      }
-    }
     ws.play();
     setIsPlaying(true);
-  }, [isReady, region]);
+  }, [isReady, region, trackRestart]);
 
   const changeVolume = useCallback(
     (v: number) => {
@@ -490,7 +443,7 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
           if (vol > 1.0) {
             console.warn(
               "No gain node available, volume limited to 100%. Gain node ref:",
-              gainNodeRef.current
+              gainNodeRef.current,
             );
           }
         }
@@ -503,7 +456,7 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
         setVolume(volClamped);
       }
     },
-    [isReady]
+    [isReady],
   );
 
   const changePlaybackRate = useCallback(
@@ -534,7 +487,7 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
         console.error("Failed to set playback rate:", err);
       }
     },
-    [isReady]
+    [isReady],
   );
 
   const clearSelection = useCallback(() => {
@@ -559,7 +512,7 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
       const newVolume = volume + delta;
       changeVolume(newVolume);
     },
-    [volume, changeVolume]
+    [volume, changeVolume],
   );
 
   const handleVolumeDecrease = useCallback(
@@ -568,7 +521,7 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
       const newVolume = volume - delta;
       changeVolume(newVolume);
     },
-    [volume, changeVolume]
+    [volume, changeVolume],
   );
 
   const handleVolumeReset = useCallback(() => {
@@ -581,7 +534,7 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
       const newRate = playbackRate + delta;
       changePlaybackRate(newRate);
     },
-    [playbackRate, changePlaybackRate]
+    [playbackRate, changePlaybackRate],
   );
 
   const handleSpeedDecrease = useCallback(
@@ -590,7 +543,7 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
       const newRate = playbackRate - delta;
       changePlaybackRate(newRate);
     },
-    [playbackRate, changePlaybackRate]
+    [playbackRate, changePlaybackRate],
   );
 
   const handleSpeedReset = useCallback(() => {
@@ -668,98 +621,47 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
       const currentRegion = regionRef.current; // Use ref to get current region state
 
       if (currentRegion) {
-        // If we have a region, enforce its boundaries
-        // Region times are in original audio time, which matches getCurrentTime
+        // Enforce region boundaries
         if (t >= currentRegion.end) {
-          // Temporarily disable regions to allow seeks
-          const regions = regionsRef.current;
-          let regionsWereEnabled = false;
-          if (regions && typeof regions.disable === "function") {
-            regions.disable();
-            regionsWereEnabled = true;
-          }
-
           if (currentLoop) {
-            // Loop: seek back to region start
+            trackLoop();
             try {
-              ws.seekTo(currentRegion.start / dur);
+              ws.setTime(currentRegion.start);
               ws.play();
             } catch (err) {
               // Ignore seek errors
             }
           } else {
-            // No loop: stop at region end
             ws.pause();
             setIsPlaying(false);
           }
-
-          // Re-enable regions
-          if (
-            regions &&
-            regionsWereEnabled &&
-            typeof regions.enable === "function"
-          ) {
-            regions.enable();
-          }
         } else if (t < currentRegion.start) {
-          // If somehow before region start, seek to start
-          const regions = regionsRef.current;
-          let regionsWereEnabled = false;
-          if (regions && typeof regions.disable === "function") {
-            regions.disable();
-            regionsWereEnabled = true;
-          }
-
           try {
-            ws.seekTo(currentRegion.start / dur);
+            ws.setTime(currentRegion.start);
             if (!currentIsPlaying) ws.play();
           } catch (err) {
             // Ignore seek errors
           }
-
-          if (
-            regions &&
-            regionsWereEnabled &&
-            typeof regions.enable === "function"
-          ) {
-            regions.enable();
-          }
         }
       } else if (currentLoop) {
         // No region, but looping: loop the whole clip
-        // Use a more reliable check - check if we're at or past the end
-        // Also check if audio actually finished (isPlaying becomes false)
         const isAtEnd =
           t >= dur - 0.01 || (!currentIsPlaying && t >= dur - 0.1);
 
         if (isAtEnd) {
-          const regions = regionsRef.current;
-          let regionsWereEnabled = false;
-          if (regions && typeof regions.disable === "function") {
-            regions.disable();
-            regionsWereEnabled = true;
-          }
-
+          trackLoop();
           try {
-            ws.seekTo(0);
+            ws.setTime(0);
             ws.play();
           } catch (err) {
             // Ignore seek errors
-          }
-
-          if (
-            regions &&
-            regionsWereEnabled &&
-            typeof regions.enable === "function"
-          ) {
-            regions.enable();
           }
         }
       }
     }, 60);
 
     return () => clearInterval(id);
-  }, [isPlaying, loop, region]); // Keep dependencies but use refs inside
+  }, [isPlaying, loop, region, trackLoop]); // Keep dependencies but use refs inside
 
   /* ------------------------------------------------------------------ */
   /* Helpers                                                             */
@@ -800,48 +702,52 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
       {isReady && (
         <div className="space-y-4">
           {/* Main controls */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <button onClick={playPause} className="audio-control-btn">
-                {isPlaying ? (
-                  <Pause className="w-4 h-4" />
-                ) : (
-                  <Play className="w-4 h-4" />
-                )}
-              </button>
-              <button onClick={stop} className="audio-control-btn">
-                <Square className="w-4 h-4" />
-              </button>
-              <button onClick={restart} className="audio-control-btn">
-                <RotateCcw className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setLoop(!loop)}
-                className={`audio-control-btn ${
-                  loop ? "bg-indigo-100 text-indigo-700" : ""
-                }`}
-              >
-                <Repeat className="w-4 h-4" />
-              </button>
-              {region && (
-                <button
-                  onClick={clearSelection}
-                  className="px-3 py-2 bg-indigo-100 text-indigo-700 rounded-md text-sm"
-                >
-                  Clear Selection
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            {/* Playback buttons + time */}
+            <div className="flex items-center justify-between sm:justify-start gap-2">
+              <div className="flex items-center gap-2">
+                <button onClick={playPause} className="audio-control-btn">
+                  {isPlaying ? (
+                    <Pause className="w-4 h-4" />
+                  ) : (
+                    <Play className="w-4 h-4" />
+                  )}
                 </button>
-              )}
+                <button onClick={stop} className="audio-control-btn">
+                  <Square className="w-4 h-4" />
+                </button>
+                <button onClick={restart} className="audio-control-btn">
+                  <RotateCcw className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setLoop(!loop)}
+                  className={`audio-control-btn ${
+                    loop ? "bg-indigo-100 text-indigo-700" : ""
+                  }`}
+                >
+                  <Repeat className="w-4 h-4" />
+                </button>
+                {region && (
+                  <button
+                    onClick={clearSelection}
+                    className="px-2 py-1 sm:px-3 sm:py-2 bg-indigo-100 text-indigo-700 rounded-md text-xs sm:text-sm"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+
+              <div className="font-mono text-sm text-gray-600">
+                {fmt(current)} / {fmt(originalDurationRef.current || duration)}
+                {playbackRate !== 1 && (
+                  <span className="text-xs text-gray-500 ml-1">
+                    ({playbackRate.toFixed(1)}x)
+                  </span>
+                )}
+              </div>
             </div>
 
-            <div className="font-mono text-sm text-gray-600">
-              {fmt(current)} / {fmt(originalDurationRef.current || duration)}
-              {playbackRate !== 1 && (
-                <span className="text-xs text-gray-500 ml-1">
-                  ({playbackRate.toFixed(1)}x)
-                </span>
-              )}
-            </div>
-
+            {/* Volume + Speed controls */}
             <div className="flex items-center gap-4">
               {/* Volume Control */}
               <div className="flex flex-col gap-1">
@@ -854,13 +760,13 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
                     step="0.05"
                     value={volume}
                     onChange={(e) => changeVolume(parseFloat(e.target.value))}
-                    className="w-20"
+                    className="w-16 sm:w-20"
                   />
                   <span className="text-xs text-gray-600 min-w-[3rem]">
                     {Math.round(volume * 100)}%
                   </span>
                 </div>
-                <div className="flex items-center justify-center gap-1 ml-6 w-20">
+                <div className="hidden sm:flex items-center justify-center gap-1 ml-6 w-20">
                   <button
                     onClick={handleVolumeDecrease}
                     className="inline-flex items-center justify-center w-8 h-8 bg-white border border-gray-200 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors"
@@ -901,13 +807,13 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
                     onChange={(e) =>
                       changePlaybackRate(parseFloat(e.target.value))
                     }
-                    className="w-20"
+                    className="w-16 sm:w-20"
                   />
                   <span className="text-xs text-gray-600 min-w-[2.5rem]">
                     {playbackRate.toFixed(2)}x
                   </span>
                 </div>
-                <div className="flex items-center justify-center gap-1 ml-6 w-20">
+                <div className="hidden sm:flex items-center justify-center gap-1 ml-6 w-20">
                   <button
                     onClick={handleSpeedDecrease}
                     className="inline-flex items-center justify-center w-8 h-8 bg-white border border-gray-200 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors"
@@ -937,8 +843,8 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
             </div>
           </div>
 
-          {/* Keyboard Shortcuts Info */}
-          <div className="text-xs text-gray-600 bg-gray-50 rounded-md p-3">
+          {/* Keyboard Shortcuts Info - hidden on mobile */}
+          <div className="hidden sm:block text-xs text-gray-600 bg-gray-50 rounded-md p-3">
             <p>
               <kbd className="keyboard-hint">Space</kbd> Play/Pause •{" "}
               <kbd className="keyboard-hint">S</kbd> Stop •{" "}
