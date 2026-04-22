@@ -26,6 +26,11 @@
 .cursor
 .vscode
 
+# AI tooling
+.ai/
+.claude/
+ai-workflow/
+
 # legacy data files
 /data
 /public/uploads

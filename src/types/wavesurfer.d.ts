@@ -36,6 +36,7 @@ export interface WaveSurferInstance {
   setVolume(volume: number): void;
   setPlaybackRate(rate: number): void;
   seekTo(progress: number): void;
+  setTime(time: number): void;
   isPlaying(): boolean;
   on(event: string, callback: (...args: unknown[]) => void): void;
   un(event: string, callback: (...args: unknown[]) => void): void;
