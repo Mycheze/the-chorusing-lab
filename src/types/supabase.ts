@@ -12,6 +12,7 @@ export interface Database {
       profiles: {
         Row: {
           id: string
+          refold_id: number | null
           username: string
           email: string
           created_at: string
@@ -20,6 +21,7 @@ export interface Database {
         }
         Insert: {
           id: string
+          refold_id?: number | null
           username: string
           email: string
           created_at?: string
@@ -28,12 +30,14 @@ export interface Database {
         }
         Update: {
           id?: string
+          refold_id?: number | null
           username?: string
           email?: string
           created_at?: string
           updated_at?: string
           filter_preferences?: Json | null
         }
+        Relationships: []
       }
       audio_clips: {
         Row: {
@@ -93,6 +97,7 @@ export interface Database {
           created_at?: string
           updated_at?: string
         }
+        Relationships: []
       }
       clip_stars: {
         Row: {
@@ -113,6 +118,7 @@ export interface Database {
           user_id?: string
           created_at?: string
         }
+        Relationships: []
       }
       clip_difficulty_ratings: {
         Row: {
@@ -136,6 +142,7 @@ export interface Database {
           rating?: number
           created_at?: string
         }
+        Relationships: []
       }
       clip_votes: {
         Row: {
@@ -159,6 +166,7 @@ export interface Database {
           vote_type?: 'up' | 'down'
           created_at?: string
         }
+        Relationships: []
       }
       clip_sessions: {
         Row: {

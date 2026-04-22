@@ -34,7 +34,7 @@ interface ClipWithUrl extends AudioClip {
 }
 
 export default function ChorusPage() {
-  const { user, getAuthHeaders } = useAuth();
+  const { user } = useAuth();
   const params = useParams();
   const clipId = params?.clipId as string;
 
@@ -51,13 +51,7 @@ export default function ChorusPage() {
       setError(null);
 
       try {
-        const headers: HeadersInit = {};
-        if (user) {
-          const authHeaders = getAuthHeaders();
-          Object.assign(headers, authHeaders);
-        }
-
-        const response = await fetch("/api/clips", { headers });
+        const response = await fetch("/api/clips");
 
         if (!response.ok) {
           throw new Error("Failed to fetch clips");
@@ -82,7 +76,7 @@ export default function ChorusPage() {
     };
 
     fetchClip();
-  }, [clipId, user, getAuthHeaders]);
+  }, [clipId, user]);
 
   // Create a truly stable clip for the player
   // This ONLY changes when the clip ID or URL changes, NOT when metadata updates
@@ -220,8 +214,11 @@ export default function ChorusPage() {
               {/* Clip Info Card */}
               <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
                 <div className="flex flex-col lg:flex-row items-start justify-between gap-4 mb-4">
-                  <div className="flex-1">
-                    <h2 className="text-xl font-bold text-gray-900">
+                  <div className="flex-1 min-w-0">
+                    <h2
+                      className="text-xl font-bold text-gray-900 truncate"
+                      title={clip.title}
+                    >
                       {clip.title}
                     </h2>
                     <div className="flex items-center gap-4 text-sm text-gray-600 mt-1">

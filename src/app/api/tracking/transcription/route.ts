@@ -1,26 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAccessToken } from "@/lib/supabase";
-import { createAuthenticatedClient } from "@/lib/supabase";
+import { getSession } from "@/lib/session";
+import { supabaseService } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
   try {
-    // Get auth token from Authorization header
-    const authHeader = request.headers.get("Authorization");
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    const session = getSession(request);
+    if (!session) {
       return NextResponse.json(
         { error: "Authentication required" },
-        { status: 401 },
-      );
-    }
-
-    const accessToken = authHeader.substring(7);
-    const { user, error: authError } = await verifyAccessToken(accessToken);
-
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: "Invalid authentication" },
         { status: 401 },
       );
     }
@@ -52,10 +41,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const authenticatedClient = createAuthenticatedClient(accessToken);
-
     const attemptData: any = {
-      user_id: user.id,
+      user_id: session.userId,
       clip_id,
       is_submission: Boolean(is_submission),
     };
@@ -72,7 +59,7 @@ export async function POST(request: NextRequest) {
       attemptData.characters_total = Math.max(0, characters_total);
     }
 
-    const { data, error } = await authenticatedClient
+    const { data, error } = await supabaseService
       .from("transcription_attempts")
       .insert(attemptData)
       .select()

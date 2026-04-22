@@ -21,7 +21,7 @@ interface ClipWithStarInfo extends AudioClip {
 }
 
 export function RelatedClips({ currentClip }: RelatedClipsProps) {
-  const { user, getAuthHeaders } = useAuth();
+  const { user } = useAuth();
   const [relatedClips, setRelatedClips] = useState<ClipWithStarInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -40,13 +40,7 @@ export function RelatedClips({ currentClip }: RelatedClipsProps) {
         params.append("sortDirection", "desc");
         params.append("limit", "10");
 
-        const headers: HeadersInit = {
-          ...getAuthHeaders(),
-        };
-
-        const response = await fetch(`/api/clips?${params.toString()}`, {
-          headers,
-        });
+        const response = await fetch(`/api/clips?${params.toString()}`);
 
         if (!response.ok) {
           throw new Error("Failed to fetch related clips");
@@ -72,7 +66,7 @@ export function RelatedClips({ currentClip }: RelatedClipsProps) {
     };
 
     fetchRelatedClips();
-  }, [currentClip, user, getAuthHeaders]);
+  }, [currentClip, user]);
 
   const formatDuration = (seconds: number) => {
     if (seconds < 60) return `${Math.round(seconds)}s`;
@@ -120,10 +114,13 @@ export function RelatedClips({ currentClip }: RelatedClipsProps) {
               className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-50 transition-colors group"
             >
               <div className="flex-1 min-w-0">
-                <p className="text-sm text-gray-900 truncate group-hover:text-indigo-600">
+                <p
+                  className="text-sm text-gray-900 truncate group-hover:text-indigo-600"
+                  title={clip.title}
+                >
                   {clip.metadata.transcript
                     ? clip.metadata.transcript.length > 40
-                      ? clip.metadata.transcript.substring(0, 40) + "…"
+                      ? clip.metadata.transcript.substring(0, 40) + "..."
                       : clip.metadata.transcript
                     : clip.title}
                 </p>

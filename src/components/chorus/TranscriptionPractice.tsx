@@ -17,8 +17,6 @@ import type {
   TranscriptionComparison,
   TranscriptionDiff,
 } from "@/types/audio";
-import { createClient } from "@supabase/supabase-js";
-import type { Database } from "@/types/supabase";
 import { calculateAccuracy, generateDiff } from "@/lib/transcription-diff";
 
 interface TranscriptionPracticeProps {
@@ -30,7 +28,7 @@ export function TranscriptionPractice({
   clip,
   onTranscriptionUpdate,
 }: TranscriptionPracticeProps) {
-  const { user, getAuthHeaders } = useAuth();
+  const { user } = useAuth();
   const [state, setState] = useState<TranscriptionPracticeState>({
     isRevealed: false,
     userInput: "",
@@ -65,7 +63,7 @@ export function TranscriptionPractice({
         correctCharacters,
       };
     },
-    []
+    [],
   );
 
   const toggleReveal = useCallback(() => {
@@ -81,7 +79,7 @@ export function TranscriptionPractice({
 
     const comparison = calculateDiff(
       clip.metadata.transcript!,
-      state.userInput
+      state.userInput,
     );
     setState((prev) => ({
       ...prev,
@@ -96,7 +94,6 @@ export function TranscriptionPractice({
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            ...getAuthHeaders(),
           },
           body: JSON.stringify({
             clip_id: clip.id,
@@ -117,7 +114,6 @@ export function TranscriptionPractice({
     clip.metadata.transcript,
     calculateDiff,
     user,
-    getAuthHeaders,
   ]);
 
   const resetInput = useCallback(() => {
@@ -139,7 +135,6 @@ export function TranscriptionPractice({
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          ...getAuthHeaders(),
         },
         body: JSON.stringify({
           title: clip.title,
@@ -164,7 +159,6 @@ export function TranscriptionPractice({
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            ...getAuthHeaders(),
           },
           body: JSON.stringify({
             clip_id: clip.id,
@@ -194,7 +188,7 @@ export function TranscriptionPractice({
             : "Failed to save transcription",
       }));
     }
-  }, [user, state.userInput, clip, onTranscriptionUpdate, getAuthHeaders]);
+  }, [user, state.userInput, clip, onTranscriptionUpdate]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -407,8 +401,8 @@ export function TranscriptionPractice({
                   state.comparison.accuracy >= 90
                     ? "text-green-600"
                     : state.comparison.accuracy >= 70
-                    ? "text-yellow-600"
-                    : "text-red-600"
+                      ? "text-yellow-600"
+                      : "text-red-600"
                 }`}
               >
                 {state.comparison.accuracy}% Accurate

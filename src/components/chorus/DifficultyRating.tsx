@@ -19,7 +19,7 @@ export function DifficultyRating({
   userRating,
   onRatingUpdate,
 }: DifficultyRatingProps) {
-  const { user, getAuthHeaders } = useAuth();
+  const { user } = useAuth();
   const [hoveredRating, setHoveredRating] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentAverage, setCurrentAverage] = useState<number | null>(averageRating);
@@ -41,7 +41,6 @@ export function DifficultyRating({
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...getAuthHeaders(),
         },
         body: JSON.stringify({ rating }),
       });
@@ -72,7 +71,6 @@ export function DifficultyRating({
     try {
       const response = await fetch(`/api/clips/${clipId}/difficulty`, {
         method: "DELETE",
-        headers: getAuthHeaders(),
       });
 
       if (!response.ok) {

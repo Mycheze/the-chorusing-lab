@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseMonitor } from "@/lib/supabase-monitor";
 import { supabase } from "@/lib/supabase";
 import { serverDb } from "@/lib/server-database";
+import { getSession } from "@/lib/session";
+import { isAdmin } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -17,25 +19,25 @@ interface HealthTestResult {
  */
 function sanitizeError(error: string | undefined): string | undefined {
   if (!error) return undefined;
-  
+
   // Remove potential user IDs (UUIDs)
   let sanitized = error.replace(
     /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi,
     "[USER_ID]"
   );
-  
+
   // Remove potential email addresses
   sanitized = sanitized.replace(
     /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,
     "[EMAIL]"
   );
-  
+
   // Remove potential file paths
   sanitized = sanitized.replace(
     /\/[^\s]+/g,
     "[PATH]"
   );
-  
+
   return sanitized;
 }
 
@@ -65,7 +67,6 @@ async function runHealthTests(): Promise<HealthTestResult[]> {
       latency,
     });
   } catch (error: any) {
-    const latency = Date.now();
     results.push({
       test: "Database Query",
       success: false,
@@ -74,51 +75,12 @@ async function runHealthTests(): Promise<HealthTestResult[]> {
     });
   }
 
-  // Test 2: Auth operation
-  try {
-    const start = Date.now();
-    const { error } = await supabase.auth.getSession();
-    const latency = Date.now() - start;
-    
-    // This will be logged by the auth.tsx wrapper, but we also log it here for the test
-    supabaseMonitor.logRequest({
-      type: 'auth',
-      operation: 'getSession',
-      duration: latency,
-      status: error ? 'failure' : 'success',
-      error: error?.message,
-      errorCode: error?.status?.toString(),
-    });
-    
-    results.push({
-      test: "Auth GetSession",
-      success: !error,
-      latency,
-      error: error?.message,
-    });
-  } catch (error: any) {
-    const latency = Date.now();
-    supabaseMonitor.logRequest({
-      type: 'auth',
-      operation: 'getSession',
-      duration: latency,
-      status: 'failure',
-      error: error?.message || "Unknown error",
-    });
-    results.push({
-      test: "Auth GetSession",
-      success: false,
-      latency: 0,
-      error: error?.message || "Unknown error",
-    });
-  }
-
-  // Test 3: Storage operation
+  // Test 2: Storage operation
   try {
     const start = Date.now();
     const { data, error } = await supabase.storage.listBuckets();
     const latency = Date.now() - start;
-    
+
     supabaseMonitor.logRequest({
       type: 'storage',
       operation: 'listBuckets',
@@ -128,7 +90,7 @@ async function runHealthTests(): Promise<HealthTestResult[]> {
       errorCode: (error as any)?.statusCode?.toString(),
       responseSize: data ? JSON.stringify(data).length : undefined,
     });
-    
+
     results.push({
       test: "Storage ListBuckets",
       success: !error,
@@ -158,8 +120,12 @@ async function runHealthTests(): Promise<HealthTestResult[]> {
 
 export async function GET(request: NextRequest) {
   try {
-    // Health report is publicly accessible (no auth required)
-    // All sensitive data is sanitized before being returned
+    // Require admin authentication
+    const session = getSession(request);
+    if (!session || !isAdmin(session.refoldId)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const { searchParams } = new URL(request.url);
     const runTests = searchParams.get("test") === "true";
 
@@ -187,8 +153,8 @@ export async function GET(request: NextRequest) {
       supabaseUrl: maskSupabaseUrl(supabaseUrl),
       environment: process.env.NODE_ENV || "unknown",
       nodeVersion: process.version,
-      nextVersion: "14.1.0", // Update if needed
-      supabaseClientVersion: "2.39.7", // Update if needed
+      nextVersion: "14.2.35",
+      supabaseClientVersion: "2.39.7",
     };
 
     // Get last successful connection time

@@ -37,7 +37,7 @@ interface AudioBrowserProps {
   onRefresh?: () => void;
 }
 
-interface ClipWithStarInfo extends AudioClip {
+export interface ClipWithStarInfo extends AudioClip {
   url: string;
   starCount: number;
   isStarredByUser: boolean;
@@ -53,7 +53,7 @@ interface ClipWithStarInfo extends AudioClip {
 }
 
 export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
-  const { user, getAuthHeaders } = useAuth();
+  const { user } = useAuth();
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -125,12 +125,6 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
   const clipsLengthRef = useRef(clips.length);
   const fetchGenerationRef = useRef(0);
 
-  // Language counts from all clips (unfiltered) for sorting the language dropdown
-  const allLanguageCountsRef = useRef<Record<string, number> | null>(null);
-  const [allLanguageCounts, setAllLanguageCounts] = useState<
-    Record<string, number>
-  >({});
-
   // Refs for preference management
   const preferencesLoadedRef = useRef(false);
   const lastSavedPreferencesRef = useRef<FilterPreferences | null>(null);
@@ -139,6 +133,26 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
   const [hasInitialLoad, setHasInitialLoad] = useState(false);
   const hasInitialLoadRef = useRef(false);
   const [preferencesApplied, setPreferencesApplied] = useState(false); // Track when preferences have been applied to state
+
+  // Language counts for LanguageSelector sorting
+  const [languageCounts, setLanguageCounts] = useState<Record<string, number>>(
+    {},
+  );
+
+  useEffect(() => {
+    const fetchLanguageCounts = async () => {
+      try {
+        const response = await fetch("/api/language-counts");
+        if (response.ok) {
+          const data = await response.json();
+          setLanguageCounts(data.counts || {});
+        }
+      } catch (error) {
+        console.warn("Failed to fetch language counts:", error);
+      }
+    };
+    fetchLanguageCounts();
+  }, []);
 
   // State for available dialects
   const [availableDialects, setAvailableDialects] = useState<string[]>([]);
@@ -209,11 +223,9 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
     // Debounce save (1.5 seconds, matching search term debounce)
     const timeoutId = setTimeout(async () => {
       try {
-        const headers = getAuthHeaders();
         const response = await fetch("/api/user/preferences", {
           method: "PUT",
           headers: {
-            ...headers,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
@@ -250,7 +262,6 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
     filters.speedFilter,
     sort,
     user,
-    getAuthHeaders,
   ]);
 
   // Fetch available dialects when language changes
@@ -354,10 +365,7 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
         searchParams?.get("sortField");
 
       try {
-        const headers = getAuthHeaders();
-        const response = await fetch("/api/user/preferences", {
-          headers,
-        });
+        const response = await fetch("/api/user/preferences");
 
         if (response.ok) {
           const data = await response.json();
@@ -439,7 +447,7 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
     };
 
     loadPreferences();
-  }, [user, searchParams, getAuthHeaders, updateURL, searchTerm]);
+  }, [user, searchParams, updateURL, searchTerm]);
 
   const fetchClips = useCallback(
     async (isFilterChange: boolean = false, retryCount = 0) => {
@@ -479,17 +487,12 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
         params.append("sortField", sort.field);
         params.append("sortDirection", sort.direction);
 
-        const headers: HeadersInit = {
-          ...getAuthHeaders(),
-        };
-
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
 
         let response: Response;
         try {
           response = await fetch(`/api/clips?${params.toString()}`, {
-            headers,
             signal: controller.signal,
           });
           clearTimeout(timeoutId);
@@ -572,8 +575,26 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
         }
       }
     },
-    [filters, sort, showStarred, showMyUploads, getAuthHeaders, clips.length],
+    [filters, sort, showStarred, showMyUploads, clips.length],
   );
+
+  // Initial load - wait for preferences to load AND be applied first, then fetch with correct filters
+  useEffect(() => {
+    // Don't fetch until preferences are loaded AND applied (or if no user, both will be true quickly)
+    if (hasInitialLoadRef.current || preferencesLoading || !preferencesApplied)
+      return;
+
+    // Preferences are loaded and applied, now do initial fetch with correct filters
+    // Use a small delay to ensure state has propagated (but much shorter than before)
+    const timeoutId = setTimeout(() => {
+      fetchClips(false);
+      hasInitialLoadRef.current = true;
+      setHasInitialLoad(true);
+    }, 50); // Minimal delay just to ensure React state has updated
+
+    return () => clearTimeout(timeoutId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preferencesLoading, preferencesApplied]); // Wait for preferences to load and be applied before initial fetch
 
   // Handle refresh from parent
   useEffect(() => {
@@ -589,32 +610,6 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
   useEffect(() => {
     fetchClipsRef.current = fetchClips;
   }, [fetchClips]);
-
-  // Fetch language counts once (unfiltered) for sorting the language dropdown
-  useEffect(() => {
-    if (allLanguageCountsRef.current) return;
-    const fetchCounts = async () => {
-      try {
-        const response = await fetch("/api/clips", {
-          headers: { ...getAuthHeaders() },
-        });
-        if (!response.ok) return;
-        const data = await response.json();
-        if (data.clips && Array.isArray(data.clips)) {
-          const counts: Record<string, number> = {};
-          for (const clip of data.clips) {
-            const lang = clip.metadata?.language;
-            if (lang) counts[lang] = (counts[lang] || 0) + 1;
-          }
-          allLanguageCountsRef.current = counts;
-          setAllLanguageCounts(counts);
-        }
-      } catch {
-        // Non-critical — dropdown just won't be sorted
-      }
-    };
-    fetchCounts();
-  }, [getAuthHeaders]);
 
   // Single unified fetch effect — replaces separate initial-load and filter-change effects
   // to eliminate the race condition where both could fire on the same render cycle.
@@ -703,9 +698,6 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
     setSearchTerm(term);
   };
 
-  // Use stable language counts from the unfiltered fetch for the dropdown sort
-  // (allLanguageCounts is populated once on mount, not from the filtered clips)
-
   // Debounce search term URL updates (only for search term, other filters update immediately)
   // Use a longer debounce (1.5s) so URL only updates when user has stopped typing
   // This prevents reload-like behavior while still preserving search in URL
@@ -751,9 +743,6 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
       const method = isStarred ? "DELETE" : "POST";
       const response = await fetch(`/api/clips/${clipId}/star`, {
         method,
-        headers: {
-          ...getAuthHeaders(),
-        },
       });
 
       if (response.ok) {
@@ -792,9 +781,6 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
     try {
       const response = await fetch(`/api/clips/${deletingClip.id}`, {
         method: "DELETE",
-        headers: {
-          ...getAuthHeaders(),
-        },
       });
 
       if (response.ok) {
@@ -966,7 +952,7 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
                 value={filters.language || ""}
                 onChange={handleLanguageFilterChange}
                 className="w-full"
-                languageCounts={allLanguageCounts}
+                clipCounts={languageCounts}
               />
             </div>
 
@@ -1184,7 +1170,7 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
                   onClick={() => toggleExpanded(clip.id)}
                 >
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4 flex-1">
+                    <div className="flex items-center gap-4 flex-1 min-w-0">
                       <div className="text-gray-400 hover:text-gray-600">
                         {expandedClip === clip.id ? (
                           <ChevronDown className="w-5 h-5" />
@@ -1193,8 +1179,8 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
                         )}
                       </div>
 
-                      <div className="flex-1">
-                        <h3 className="font-medium text-gray-900">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-medium text-gray-900 truncate">
                           {clip.title}
                         </h3>
                         <div className="flex items-center gap-4 text-sm text-gray-500 mt-1 flex-wrap">

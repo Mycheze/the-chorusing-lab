@@ -57,7 +57,7 @@ interface TimelineItem {
 }
 
 export default function StatsPage() {
-  const { user, isLoading: authLoading, getAuthHeaders } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -74,9 +74,7 @@ export default function StatsPage() {
 
     const fetchStats = async () => {
       try {
-        const response = await fetch("/api/stats", {
-          headers: getAuthHeaders(),
-        });
+        const response = await fetch("/api/stats");
 
         if (!response.ok) {
           throw new Error("Failed to fetch stats");
@@ -93,9 +91,7 @@ export default function StatsPage() {
 
     const fetchTimeline = async () => {
       try {
-        const response = await fetch("/api/stats/timeline?limit=20", {
-          headers: getAuthHeaders(),
-        });
+        const response = await fetch("/api/stats/timeline?limit=20");
 
         if (!response.ok) {
           throw new Error("Failed to fetch timeline");
@@ -112,7 +108,7 @@ export default function StatsPage() {
 
     fetchStats();
     fetchTimeline();
-  }, [user, authLoading, router, getAuthHeaders]);
+  }, [user, authLoading, router]);
 
   if (authLoading || !user) {
     return (

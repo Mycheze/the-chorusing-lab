@@ -19,9 +19,21 @@ import {
 } from "lucide-react";
 import type { AudioClip } from "@/types/audio";
 import { useClipSessionTracking } from "@/hooks/useClipSessionTracking";
+import type {
+  WaveSurferInstance,
+  WaveSurferBackend,
+  WaveSurferRegion,
+} from "@/types/wavesurfer";
+
+// Helper to access the internal backend of a WaveSurfer instance (not in public API)
+function getBackend(ws: WaveSurferInstance): WaveSurferBackend | undefined {
+  return (ws as unknown as Record<string, unknown>).backend as
+    | WaveSurferBackend
+    | undefined;
+}
 
 /* ----------  ONE-AND-ONLY global WaveSurfer instance  -------------- */
-let _activeWs: any | null = null;
+let _activeWs: WaveSurferInstance | null = null;
 
 interface ChorusingPlayerProps {
   clip: AudioClip & { url: string };
@@ -34,8 +46,15 @@ interface AudioRegion {
 
 export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
   const waveformRef = useRef<HTMLDivElement>(null);
-  const wsRef = useRef<any>(null);
-  const regionsRef = useRef<any>(null);
+  const wsRef = useRef<WaveSurferInstance | null>(null);
+  // RegionsPlugin from wavesurfer.js - typed loosely since we dynamically import
+  const regionsRef = useRef<{
+    getRegions(): WaveSurferRegion[];
+    enableDragSelection(options: { color: string }): void;
+    on(event: string, callback: (...args: unknown[]) => void): void;
+    enable?: () => void;
+    disable?: () => void;
+  } | null>(null);
   const mounted = useRef(true);
   const gainNodeRef = useRef<GainNode | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -73,7 +92,7 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
   }, [region]);
 
   /* ----------  Robust destroy helper  ------------------------------ */
-  const destroy = useCallback((ws?: any) => {
+  const destroy = useCallback((ws?: WaveSurferInstance | null) => {
     try {
       ws?.destroy?.();
     } catch {
@@ -120,19 +139,19 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
           // Use MediaElement backend for preservesPitch support (tempo change without pitch shift)
           backend: "MediaElement" as const,
         });
-        wsRef.current = ws;
-        _activeWs = ws;
+        wsRef.current = ws as unknown as WaveSurferInstance;
+        _activeWs = ws as unknown as WaveSurferInstance;
         (waveformElement as any).__WS = ws; // dev-tool handle
 
         // Try to set up gain node as early as possible - before audio is ready
         // This needs to happen before WaveSurfer fully initializes the media element
         ws.on("load", () => {
           // This fires when audio starts loading
-          const backend = (ws as any).backend;
+          const backend = getBackend(ws);
           // Try multiple ways to access the media element
           const mediaElement =
             backend?.media ||
-            (ws as any).getMediaElement?.() ||
+            ws.getMediaElement?.() ||
             backend?.el ||
             backend?.mediaElement;
           if (mediaElement && !gainNodeRef.current) {
@@ -154,8 +173,11 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
               gainNodeRef.current = gainNode;
 
               (mediaElement as any).__sourceNode = source;
-            } catch (err: any) {
-              console.warn("Early gain node creation failed:", err.message);
+            } catch (err) {
+              console.warn(
+                "Early gain node creation failed:",
+                err instanceof Error ? err.message : err,
+              );
             }
           }
         });
@@ -171,11 +193,11 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
           try {
             ws.setPlaybackRate(1.0);
             // If using MediaElement backend, set preservesPitch for tempo change
-            const backend = (ws as any).backend;
+            const backend = getBackend(ws);
             // Try multiple ways to access the media element
             const mediaElement =
               backend?.media ||
-              (ws as any).getMediaElement?.() ||
+              ws.getMediaElement?.() ||
               backend?.el ||
               backend?.mediaElement;
 
@@ -214,10 +236,10 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
                     audioContextRef.current = audioContext;
                     mediaSourceRef.current = source;
                     gainNodeRef.current = gainNode;
-                  } catch (err: any) {
+                  } catch (err) {
                     console.error(
                       "❌ Failed to create gain node:",
-                      err.message || err,
+                      err instanceof Error ? err.message : err,
                     );
                   }
                 };
@@ -266,27 +288,25 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
           setCurrent(t);
         });
 
-        regions.on("region-created", (r: any) => {
-          regions
-            .getRegions()
-            .forEach((rg: any) => rg.id !== r.id && rg.remove());
+        regions.on("region-created", (r: unknown) => {
+          const reg = r as WaveSurferRegion;
+          regions.getRegions().forEach((rg) => rg.id !== reg.id && rg.remove());
           mounted.current &&
-            setRegion({ id: r.id, start: r.start, end: r.end });
+            setRegion({ id: reg.id, start: reg.start, end: reg.end });
         });
-        regions.on(
-          "region-updated",
-          (r: any) =>
-            mounted.current &&
-            setRegion({ id: r.id, start: r.start, end: r.end }),
-        );
+        regions.on("region-updated", (r: unknown) => {
+          const reg = r as WaveSurferRegion;
+          mounted.current &&
+            setRegion({ id: reg.id, start: reg.start, end: reg.end });
+        });
         regions.on("region-removed", () => mounted.current && setRegion(null));
 
         regions.enableDragSelection({ color: "rgba(79,70,229,0.3)" });
 
         await ws.load(clip.url);
-      } catch (e: any) {
+      } catch (e) {
         if (!cancelled) {
-          setError(e?.message ?? "Failed to load audio");
+          setError(e instanceof Error ? e.message : "Failed to load audio");
           setLoading(false);
         }
       }
@@ -409,15 +429,11 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
       const vol = Math.max(0, Math.min(3, v));
 
       try {
-        const backend = (ws as any).backend;
+        const backend = getBackend(ws);
 
         // Try to get gain node from backend (WebAudio) or use our custom one (MediaElement)
-        let gainNode = backend?.gainNode;
-
-        // If no gainNode from backend, use our custom one for MediaElement
-        if (!gainNode) {
-          gainNode = gainNodeRef.current;
-        }
+        const gainNode: GainNode | null | undefined =
+          backend?.gainNode ?? gainNodeRef.current;
 
         if (gainNode) {
           // Ensure audio context is running
@@ -472,7 +488,7 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
 
         // Enable preservesPitch for tempo change (speed without pitch shift)
         // MediaElement backend supports this natively
-        const backend = (ws as any).backend;
+        const backend = getBackend(ws);
         if (backend?.media) {
           backend.media.preservesPitch = true;
         }
@@ -494,10 +510,8 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
     const regions = regionsRef.current;
     if (regions) {
       const allRegions = regions.getRegions();
-      allRegions.forEach((r: any) => {
-        if (typeof r.remove === "function") {
-          r.remove();
-        }
+      allRegions.forEach((r) => {
+        r.remove();
       });
     }
     setRegion(null);

@@ -17,7 +17,7 @@ export function useClipSessionTracking({
   onLoop,
   onRestart,
 }: UseClipSessionTrackingProps) {
-  const { user, getAuthHeaders } = useAuth();
+  const { user } = useAuth();
   const sessionIdRef = useRef<string | null>(null);
   const sessionStartedRef = useRef(false);
   const accumulatedSecondsRef = useRef(0);
@@ -31,7 +31,6 @@ export function useClipSessionTracking({
   // Stable refs for values used in sendSessionData to avoid dependency churn
   const clipIdRef = useRef(clip.id);
   const clipLanguageRef = useRef(clip.metadata.language);
-  const getAuthHeadersRef = useRef(getAuthHeaders);
   const userRef = useRef(user);
 
   // Keep refs in sync
@@ -41,9 +40,6 @@ export function useClipSessionTracking({
   useEffect(() => {
     clipLanguageRef.current = clip.metadata.language;
   }, [clip.metadata.language]);
-  useEffect(() => {
-    getAuthHeadersRef.current = getAuthHeaders;
-  }, [getAuthHeaders]);
   useEffect(() => {
     userRef.current = user;
   }, [user]);
@@ -92,7 +88,6 @@ export function useClipSessionTracking({
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            ...getAuthHeadersRef.current(),
           },
           body: JSON.stringify(sessionData),
           keepalive: isFinal,

@@ -1,23 +1,11 @@
 // Authentication types for Chorus Lab
 
 export interface User {
-  id: string;
+  id: string; // UUID from profiles.id (internal primary key)
+  refoldId?: number; // Refold SSO user ID (profiles.refold_id)
   username: string;
   email: string;
-  createdAt: string;
   isAdmin?: boolean;
-}
-
-export interface LoginCredentials {
-  email: string;
-  password: string;
-}
-
-export interface RegisterCredentials {
-  email: string;
-  username: string;
-  password: string;
-  confirmPassword: string;
 }
 
 export interface AuthState {
@@ -27,7 +15,8 @@ export interface AuthState {
 }
 
 export interface AuthContextType extends AuthState {
-  login: (credentials: LoginCredentials) => Promise<void>;
-  register: (credentials: RegisterCredentials) => Promise<void>;
-  logout: () => void;
+  isAuthenticated: boolean;
+  login: (credentials?: any) => void;
+  register: (credentials?: any) => Promise<void>;
+  logout: () => Promise<void>;
 }

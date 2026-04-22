@@ -8,7 +8,6 @@ import {
   ExternalLink,
   ArrowRight,
 } from "lucide-react";
-import { useAuth } from "@/lib/auth";
 import type { CSVRow } from "@/lib/bulk-upload/csv-parser";
 import type { FileMatch } from "@/lib/bulk-upload/file-matcher";
 import type { AudioClip } from "@/types/audio";
@@ -37,7 +36,6 @@ export function ProcessingStep({
   onComplete,
   onBack,
 }: ProcessingStepProps) {
-  const { getAuthHeaders } = useAuth();
   const [processingStates, setProcessingStates] = useState<
     ClipProcessingState[]
   >([]);
@@ -99,7 +97,7 @@ export function ProcessingStep({
 
   const processClip = async (
     match: FileMatch,
-    csvRow: CSVRow
+    csvRow: CSVRow,
   ): Promise<{ success: boolean; clip?: AudioClip; error?: string }> => {
     try {
       // Calculate duration client-side
@@ -128,9 +126,6 @@ export function ProcessingStep({
 
       const response = await fetch("/api/bulk-upload/process", {
         method: "POST",
-        headers: {
-          ...getAuthHeaders(),
-        },
         body: formData,
       });
 
@@ -165,8 +160,8 @@ export function ProcessingStep({
           prev.map((state) =>
             state.csvRowIndex === match.csvRowIndex
               ? { ...state, status: "processing" }
-              : state
-          )
+              : state,
+          ),
         );
 
         const result = await processClip(match, csvRow);
@@ -181,8 +176,8 @@ export function ProcessingStep({
                   clip: result.clip,
                   error: result.error,
                 }
-              : state
-          )
+              : state,
+          ),
         );
 
         if (result.success) {
@@ -192,7 +187,7 @@ export function ProcessingStep({
         }
 
         return result;
-      })
+      }),
     );
 
     return results;
@@ -228,10 +223,10 @@ export function ProcessingStep({
   const allComplete =
     processingStates.length > 0 &&
     processingStates.every(
-      (state) => state.status === "success" || state.status === "error"
+      (state) => state.status === "success" || state.status === "error",
     );
   const hasSuccess = processingStates.some(
-    (state) => state.status === "success"
+    (state) => state.status === "success",
   );
 
   return (
@@ -268,7 +263,7 @@ export function ProcessingStep({
         {processingStates.map((state, index) => {
           const csvRow = csvRows[state.csvRowIndex];
           const match = matches.find(
-            (m) => m.csvRowIndex === state.csvRowIndex
+            (m) => m.csvRowIndex === state.csvRowIndex,
           );
 
           return (
@@ -278,10 +273,10 @@ export function ProcessingStep({
                 state.status === "success"
                   ? "bg-green-50 border-green-200"
                   : state.status === "error"
-                  ? "bg-red-50 border-red-200"
-                  : state.status === "processing"
-                  ? "bg-blue-50 border-blue-200"
-                  : "bg-gray-50 border-gray-200"
+                    ? "bg-red-50 border-red-200"
+                    : state.status === "processing"
+                      ? "bg-blue-50 border-blue-200"
+                      : "bg-gray-50 border-gray-200"
               }`}
             >
               <div className="flex items-center justify-between">

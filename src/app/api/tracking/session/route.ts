@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAccessToken } from "@/lib/supabase";
-import { createAuthenticatedClient } from "@/lib/supabase";
+import { getSession } from "@/lib/session";
+import { supabaseService } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
@@ -10,21 +10,10 @@ const UUID_REGEX =
 
 export async function POST(request: NextRequest) {
   try {
-    // Get auth token from Authorization header
-    const authHeader = request.headers.get("Authorization");
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    const session = getSession(request);
+    if (!session) {
       return NextResponse.json(
         { error: "Authentication required" },
-        { status: 401 },
-      );
-    }
-
-    const accessToken = authHeader.substring(7);
-    const { user, error: authError } = await verifyAccessToken(accessToken);
-
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: "Invalid authentication" },
         { status: 401 },
       );
     }
@@ -64,10 +53,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const authenticatedClient = createAuthenticatedClient(accessToken);
-
     const sessionData: Record<string, unknown> = {
-      user_id: user.id,
+      user_id: session.userId,
       clip_id,
       total_time_seconds: Math.max(0, time_seconds),
       loop_count: Math.max(0, loop_count || 0),
@@ -89,12 +76,12 @@ export async function POST(request: NextRequest) {
 
     // Upsert if session_id provided (updates existing session), otherwise insert new
     const query = session_id
-      ? authenticatedClient
+      ? supabaseService
           .from("clip_sessions")
           .upsert(sessionData, { onConflict: "id" })
           .select()
           .single()
-      : authenticatedClient
+      : supabaseService
           .from("clip_sessions")
           .insert(sessionData)
           .select()

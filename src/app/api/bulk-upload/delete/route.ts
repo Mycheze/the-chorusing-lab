@@ -1,27 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAccessToken } from '@/lib/supabase';
+import { getSession } from '@/lib/session';
 import { serverDb } from '@/lib/server-database';
 
 export async function POST(request: NextRequest) {
   try {
-    // Get auth token
-    const authHeader = request.headers.get('Authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    // Authenticate via session cookie
+    const session = getSession(request);
+    if (!session) {
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }
       );
     }
 
-    const accessToken = authHeader.substring(7);
-    const { user, error: authError } = await verifyAccessToken(accessToken);
-
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: 'Invalid authentication' },
-        { status: 401 }
-      );
-    }
+    const userId = session.userId;
 
     const body = await request.json();
     const { clipIds } = body;
@@ -43,7 +35,7 @@ export async function POST(request: NextRequest) {
     // Delete clips one by one
     const results = await Promise.allSettled(
       clipIds.map((clipId: string) =>
-        serverDb.deleteAudioClip(clipId, user.id, accessToken)
+        serverDb.deleteAudioClip(clipId, userId, session.refoldId)
       )
     );
 
@@ -57,7 +49,7 @@ export async function POST(request: NextRequest) {
       } else {
         failed.push({
           clipId,
-          error: result.status === 'rejected' 
+          error: result.status === 'rejected'
             ? result.reason?.message || 'Unknown error'
             : 'Delete returned false',
         });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { ChevronDown, Search } from "lucide-react";
 
 interface LanguageSelectorProps {
@@ -8,8 +8,8 @@ interface LanguageSelectorProps {
   onChange: (language: string) => void;
   required?: boolean;
   className?: string;
-  /** Map of language name to clip count — languages with clips sort first by count */
-  languageCounts?: Record<string, number>;
+  /** Map of language name to clip count -- languages with clips sort first by count */
+  clipCounts?: Record<string, number>;
 }
 
 // Comprehensive language list with English and native names
@@ -86,7 +86,7 @@ export function LanguageSelector({
   onChange,
   required = false,
   className = "",
-  languageCounts,
+  clipCounts,
 }: LanguageSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -94,21 +94,28 @@ export function LanguageSelector({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Filter languages based on search term, then sort by clip count if available
-  const filteredLanguages = LANGUAGES.filter(
+  // Sort languages: those with clips first (by count desc), then rest alphabetically
+  const sortedLanguages = useMemo(() => {
+    if (!clipCounts) return LANGUAGES;
+
+    const withClips = LANGUAGES.filter(
+      (lang) => (clipCounts[lang.name] || 0) > 0,
+    ).sort((a, b) => (clipCounts[b.name] || 0) - (clipCounts[a.name] || 0));
+
+    const withoutClips = LANGUAGES.filter(
+      (lang) => !(clipCounts[lang.name] || 0),
+    ).sort((a, b) => a.name.localeCompare(b.name));
+
+    return [...withClips, ...withoutClips];
+  }, [clipCounts]);
+
+  // Filter languages based on search term
+  const filteredLanguages = sortedLanguages.filter(
     (lang) =>
       lang.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       lang.native.toLowerCase().includes(searchTerm.toLowerCase()) ||
       lang.code.toLowerCase().includes(searchTerm.toLowerCase()),
-  ).sort((a, b) => {
-    if (!languageCounts) return 0; // keep alphabetical if no counts
-    const countA = languageCounts[a.name] || 0;
-    const countB = languageCounts[b.name] || 0;
-    if (countA > 0 && countB === 0) return -1;
-    if (countA === 0 && countB > 0) return 1;
-    if (countA !== countB) return countB - countA;
-    return 0; // preserve alphabetical within same count
-  });
+  );
 
   // Find selected language object
   const selectedLanguage = LANGUAGES.find((lang) => lang.name === value);
@@ -252,11 +259,16 @@ export function LanguageSelector({
                   aria-selected={selectedLanguage?.code === language.code}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="font-medium">{language.name}</span>
+                    <span className="font-medium">
+                      {language.name}
+                      {clipCounts && clipCounts[language.name] ? (
+                        <span className="text-gray-400 font-normal ml-1">
+                          ({clipCounts[language.name]})
+                        </span>
+                      ) : null}
+                    </span>
                     <span className="text-gray-500 text-xs">
-                      {languageCounts && languageCounts[language.name]
-                        ? `${languageCounts[language.name]} · ${language.native}`
-                        : language.native}
+                      {language.native}
                     </span>
                   </div>
                 </button>
