@@ -262,12 +262,34 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
             // Loop is enabled - handle looping directly in finish event
             trackLoop();
 
+            // Temporarily disable regions to allow seeks
+            const regions = regionsRef.current;
+            let regionsWereEnabled = false;
+            if (regions && typeof regions.disable === "function") {
+              regions.disable();
+              regionsWereEnabled = true;
+            }
+
             try {
               const seekTime = currentRegion ? currentRegion.start : 0;
-              ws.setTime(seekTime);
-              ws.play();
+              if (dur > 0) {
+                ws.seekTo(seekTime / dur);
+                ws.play();
+                // Don't set isPlaying(false) - keep it playing
+              } else {
+                setIsPlaying(false);
+              }
             } catch (err) {
               setIsPlaying(false);
+            }
+
+            // Re-enable regions
+            if (
+              regions &&
+              regionsWereEnabled &&
+              typeof regions.enable === "function"
+            ) {
+              regions.enable();
             }
           } else {
             // Loop is disabled - stop playback
@@ -381,12 +403,32 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
     const ws = wsRef.current;
     if (!isReady || !ws) return;
 
+    // CRITICAL: The regions plugin blocks seeks. Temporarily disable it.
+    const regions = regionsRef.current;
+    let regionsWereEnabled = false;
+
+    if (regions && typeof regions.disable === "function") {
+      regions.disable();
+      regionsWereEnabled = true;
+    }
+
     ws.pause();
 
-    // Use setTime for reliable seeking with MediaElement backend
-    const seekTime = region ? region.start : 0;
-    ws.setTime(seekTime);
-    setCurrent(seekTime);
+    const dur = ws.getDuration();
+    if (dur > 0) {
+      // If region is selected, stop at region start; otherwise stop at beginning
+      const seekTime = region ? region.start : 0;
+      ws.seekTo(seekTime / dur);
+      setCurrent(seekTime);
+    } else {
+      ws.stop();
+      setCurrent(0);
+    }
+
+    // Re-enable regions if we disabled them
+    if (regions && regionsWereEnabled && typeof regions.enable === "function") {
+      regions.enable();
+    }
 
     setIsPlaying(false);
   }, [isReady, region]);
@@ -410,13 +452,32 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
       }
     }
 
+    // CRITICAL: Temporarily disable regions to allow seeks
+    const regions = regionsRef.current;
+    let regionsWereEnabled = false;
+
+    if (regions && typeof regions.disable === "function") {
+      regions.disable();
+      regionsWereEnabled = true;
+    }
+
     ws.pause();
 
-    // Use setTime for reliable seeking with MediaElement backend
-    const seekTime = region ? region.start : 0;
-    ws.setTime(seekTime);
-    setCurrent(seekTime);
+    const dur = ws.getDuration();
+    if (dur > 0) {
+      const seekTime = region ? region.start : 0;
+      ws.seekTo(seekTime / dur);
+      setCurrent(seekTime);
 
+      // Re-enable regions
+      if (
+        regions &&
+        regionsWereEnabled &&
+        typeof regions.enable === "function"
+      ) {
+        regions.enable();
+      }
+    }
     ws.play();
     setIsPlaying(true);
   }, [isReady, region, trackRestart]);
@@ -635,40 +696,94 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
       const currentRegion = regionRef.current; // Use ref to get current region state
 
       if (currentRegion) {
-        // Enforce region boundaries
+        // If we have a region, enforce its boundaries
+        // Region times are in original audio time, which matches getCurrentTime
         if (t >= currentRegion.end) {
+          // Temporarily disable regions to allow seeks
+          const regions = regionsRef.current;
+          let regionsWereEnabled = false;
+          if (regions && typeof regions.disable === "function") {
+            regions.disable();
+            regionsWereEnabled = true;
+          }
+
           if (currentLoop) {
+            // Loop: seek back to region start
             trackLoop();
             try {
-              ws.setTime(currentRegion.start);
+              ws.seekTo(currentRegion.start / dur);
               ws.play();
             } catch (err) {
               // Ignore seek errors
             }
           } else {
+            // No loop: stop at region end
             ws.pause();
             setIsPlaying(false);
           }
+
+          // Re-enable regions
+          if (
+            regions &&
+            regionsWereEnabled &&
+            typeof regions.enable === "function"
+          ) {
+            regions.enable();
+          }
         } else if (t < currentRegion.start) {
+          // If somehow before region start, seek to start
+          const regions = regionsRef.current;
+          let regionsWereEnabled = false;
+          if (regions && typeof regions.disable === "function") {
+            regions.disable();
+            regionsWereEnabled = true;
+          }
+
           try {
-            ws.setTime(currentRegion.start);
+            ws.seekTo(currentRegion.start / dur);
             if (!currentIsPlaying) ws.play();
           } catch (err) {
             // Ignore seek errors
           }
+
+          if (
+            regions &&
+            regionsWereEnabled &&
+            typeof regions.enable === "function"
+          ) {
+            regions.enable();
+          }
         }
       } else if (currentLoop) {
         // No region, but looping: loop the whole clip
+        // Use a more reliable check - check if we're at or past the end
+        // Also check if audio actually finished (isPlaying becomes false)
         const isAtEnd =
           t >= dur - 0.01 || (!currentIsPlaying && t >= dur - 0.1);
 
         if (isAtEnd) {
           trackLoop();
+
+          const regions = regionsRef.current;
+          let regionsWereEnabled = false;
+          if (regions && typeof regions.disable === "function") {
+            regions.disable();
+            regionsWereEnabled = true;
+          }
+
           try {
-            ws.setTime(0);
+            ws.seekTo(0);
             ws.play();
           } catch (err) {
             // Ignore seek errors
+          }
+
+          if (
+            regions &&
+            regionsWereEnabled &&
+            typeof regions.enable === "function"
+          ) {
+            regions.enable();
           }
         }
       }
