@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { User, LogOut, ChevronDown } from 'lucide-react';
+import { User, LogOut, ChevronDown, BarChart3 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
+import Link from 'next/link';
 
 export function UserMenu() {
   const { user, logout } = useAuth();
@@ -45,6 +46,14 @@ export function UserMenu() {
             <div className="px-4 py-2 text-sm text-gray-500 border-b border-gray-100">
               Signed in as <span className="font-medium text-gray-900">{user.username}</span>
             </div>
+            <Link
+              href="/stats"
+              onClick={() => setIsOpen(false)}
+              className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 focus:outline-none focus:bg-gray-100"
+            >
+              <BarChart3 className="w-4 h-4" />
+              Stats
+            </Link>
             <button
               onClick={handleLogout}
               className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 focus:outline-none focus:bg-gray-100"

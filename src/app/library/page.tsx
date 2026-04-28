@@ -23,30 +23,32 @@ export default function LibraryPage() {
     <main className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       {/* Header with Auth */}
       <header className="p-4 bg-white/80 backdrop-blur-sm border-b border-gray-200/50">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="flex items-center gap-3">
-              <AudioLines className="w-8 h-8 text-indigo-600" />
-              <h1 className="text-2xl font-bold text-gray-900">Chorus Lab</h1>
+        <div className="max-w-6xl mx-auto flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <Link href="/" className="flex items-center gap-2 sm:gap-3">
+              <AudioLines className="w-7 h-7 sm:w-8 sm:h-8 text-indigo-600" />
+              <h1 className="text-lg sm:text-2xl font-bold text-gray-900">
+                Chorus Lab
+              </h1>
             </Link>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             {user && (
               <>
                 <Link
                   href="/clip-creator"
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-md hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                  className="flex items-center gap-2 px-2 sm:px-4 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-md hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
                 >
                   <Scissors className="w-4 h-4" />
-                  Clip Creator
+                  <span className="hidden sm:inline">Clip Creator</span>
                 </Link>
                 <button
                   onClick={() => setUploadModalOpen(true)}
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                  className="flex items-center gap-2 px-2 sm:px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
                 >
                   <Upload className="w-4 h-4" />
-                  Upload Clip
+                  <span className="hidden sm:inline">Upload Clip</span>
                 </button>
               </>
             )}

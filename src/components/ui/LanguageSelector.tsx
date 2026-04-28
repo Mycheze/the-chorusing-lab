@@ -8,6 +8,7 @@ interface LanguageSelectorProps {
   onChange: (language: string) => void;
   required?: boolean;
   className?: string;
+  /** Map of language name to clip count -- languages with clips sort first by count */
   clipCounts?: Record<string, number>;
 }
 
@@ -97,13 +98,13 @@ export function LanguageSelector({
   const sortedLanguages = useMemo(() => {
     if (!clipCounts) return LANGUAGES;
 
-    const withClips = LANGUAGES
-      .filter((lang) => (clipCounts[lang.name] || 0) > 0)
-      .sort((a, b) => (clipCounts[b.name] || 0) - (clipCounts[a.name] || 0));
+    const withClips = LANGUAGES.filter(
+      (lang) => (clipCounts[lang.name] || 0) > 0,
+    ).sort((a, b) => (clipCounts[b.name] || 0) - (clipCounts[a.name] || 0));
 
-    const withoutClips = LANGUAGES
-      .filter((lang) => !(clipCounts[lang.name] || 0))
-      .sort((a, b) => a.name.localeCompare(b.name));
+    const withoutClips = LANGUAGES.filter(
+      (lang) => !(clipCounts[lang.name] || 0),
+    ).sort((a, b) => a.name.localeCompare(b.name));
 
     return [...withClips, ...withoutClips];
   }, [clipCounts]);
@@ -113,7 +114,7 @@ export function LanguageSelector({
     (lang) =>
       lang.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       lang.native.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      lang.code.toLowerCase().includes(searchTerm.toLowerCase())
+      lang.code.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
   // Find selected language object
@@ -162,13 +163,13 @@ export function LanguageSelector({
       case "ArrowDown":
         e.preventDefault();
         setHighlightedIndex((prev) =>
-          prev < filteredLanguages.length - 1 ? prev + 1 : 0
+          prev < filteredLanguages.length - 1 ? prev + 1 : 0,
         );
         break;
       case "ArrowUp":
         e.preventDefault();
         setHighlightedIndex((prev) =>
-          prev > 0 ? prev - 1 : filteredLanguages.length - 1
+          prev > 0 ? prev - 1 : filteredLanguages.length - 1,
         );
         break;
       case "Enter":
