@@ -251,6 +251,13 @@ export function useClipFilters(userId?: string): UseClipFiltersReturn {
     fetchDialects();
   }, [filters.language]);
 
+  // Reset preferences loaded flag on unmount so returning to /library re-applies them
+  useEffect(() => {
+    return () => {
+      preferencesLoadedRef.current = false;
+    };
+  }, []);
+
   // Load user preferences BEFORE initial fetch to avoid flashing
   useEffect(() => {
     if (preferencesLoadedRef.current) return;

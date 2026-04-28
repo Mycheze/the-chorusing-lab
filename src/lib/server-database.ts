@@ -344,6 +344,37 @@ class SupabaseDatabase {
     });
   }
 
+  async getAudioClipByFilename(
+    filename: string,
+  ): Promise<(AudioClip & { storagePath: string }) | null> {
+    return this.monitorDbOperation("getAudioClipByFilename", async () => {
+      const { data, error } = await db
+        .from("audio_clips")
+        .select("*")
+        .eq("filename", filename)
+        .single();
+
+      if (error || !data) {
+        return null;
+      }
+
+      const converted = convertAudioClipFromDb(data);
+      return {
+        id: converted.id,
+        title: converted.title,
+        duration: converted.duration,
+        filename: converted.filename,
+        originalFilename: converted.originalFilename,
+        fileSize: converted.fileSize,
+        storagePath: converted.storagePath,
+        metadata: converted.metadata,
+        uploadedBy: converted.uploadedBy,
+        createdAt: converted.createdAt,
+        updatedAt: converted.updatedAt,
+      };
+    });
+  }
+
   async deleteAudioClip(
     id: string,
     userId: string,
@@ -1160,17 +1191,19 @@ class SupabaseDatabase {
     });
   }
 
-  // Helper: Calculate characters per second (alphanumeric only)
+  // Helper: Calculate characters per second (all scripts: Latin, CJK, Cyrillic, Arabic, etc.)
   calculateCharactersPerSecond(clip: AudioClip): number | null {
     if (!clip.metadata.transcript || !clip.duration || clip.duration <= 0) {
       return null;
     }
 
-    const alphanumericChars = clip.metadata.transcript.replace(
-      /[^a-zA-Z0-9]/g,
+    // Remove whitespace and punctuation/symbols, count remaining characters
+    // Works for Latin, CJK, Cyrillic, Arabic, etc.
+    const chars = clip.metadata.transcript.replace(
+      /[\s\p{P}\p{S}]/gu,
       "",
     ).length;
-    return alphanumericChars / clip.duration;
+    return chars / clip.duration;
   }
 
   // Helper: Calculate speed percentiles
