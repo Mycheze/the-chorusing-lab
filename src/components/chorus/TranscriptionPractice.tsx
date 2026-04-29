@@ -107,14 +107,7 @@ export function TranscriptionPractice({
         console.warn("Failed to track transcription attempt:", error);
       }
     }
-  }, [
-    hasOriginalTranscript,
-    state.userInput,
-    clip,
-    clip.metadata.transcript,
-    calculateDiff,
-    user,
-  ]);
+  }, [hasOriginalTranscript, state.userInput, clip, calculateDiff, user]);
 
   const resetInput = useCallback(() => {
     setState((prev) => ({
@@ -274,34 +267,15 @@ export function TranscriptionPractice({
   return (
     <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-semibold text-gray-900">
-            Transcription Practice
-          </h3>
-          <p className="text-sm text-gray-600">
-            {hasOriginalTranscript
-              ? "Type what you hear, then compare with the original"
-              : "No transcription yet - add one to help other learners!"}
-          </p>
-        </div>
-        {hasOriginalTranscript && (
-          <button
-            onClick={toggleReveal}
-            className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${
-              state.isRevealed
-                ? "bg-indigo-100 text-indigo-700 border border-indigo-300"
-                : "bg-gray-100 text-gray-700 border border-gray-300 hover:bg-gray-200"
-            }`}
-          >
-            {state.isRevealed ? (
-              <EyeOff className="w-4 h-4" />
-            ) : (
-              <Eye className="w-4 h-4" />
-            )}
-            {state.isRevealed ? "Hide" : "Reveal"} Transcription
-          </button>
-        )}
+      <div>
+        <h3 className="text-lg font-semibold text-gray-900">
+          Transcription Practice
+        </h3>
+        <p className="text-sm text-gray-600">
+          {hasOriginalTranscript
+            ? "Type what you hear, then compare with the original"
+            : "No transcription yet - add one to help other learners!"}
+        </p>
       </div>
 
       {/* Original Transcription (when revealed) */}
@@ -339,7 +313,7 @@ export function TranscriptionPractice({
       </div>
 
       {/* Action Buttons */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-wrap">
         {hasOriginalTranscript ? (
           <>
             <button
@@ -357,6 +331,21 @@ export function TranscriptionPractice({
             >
               <RotateCcw className="w-4 h-4" />
               Reset
+            </button>
+            <button
+              onClick={toggleReveal}
+              className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${
+                state.isRevealed
+                  ? "bg-indigo-100 text-indigo-700 border border-indigo-300"
+                  : "bg-gray-100 text-gray-700 border border-gray-300 hover:bg-gray-200"
+              }`}
+            >
+              {state.isRevealed ? (
+                <EyeOff className="w-4 h-4" />
+              ) : (
+                <Eye className="w-4 h-4" />
+              )}
+              {state.isRevealed ? "Hide" : "Reveal"}
             </button>
           </>
         ) : (
@@ -453,7 +442,7 @@ export function TranscriptionPractice({
       )}
 
       {/* Keyboard Shortcuts Info */}
-      <div className="text-xs text-gray-600 bg-gray-50 rounded-md p-3">
+      <div className="keyboard-hints text-xs text-gray-600 bg-gray-50 rounded-md p-3">
         <p>
           <kbd className="keyboard-hint">T</kbd> Toggle transcription reveal •{" "}
           <kbd className="keyboard-hint">Ctrl+Enter</kbd>{" "}

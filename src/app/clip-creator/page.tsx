@@ -34,7 +34,7 @@ export default function ClipCreatorPage() {
 
     if (!extension || !supportedFormats.includes(extension)) {
       setFileError(
-        `Unsupported format. Supported: ${supportedFormats.join(", ")}`
+        `Unsupported format. Supported: ${supportedFormats.join(", ")}`,
       );
       return;
     }
@@ -130,37 +130,37 @@ export default function ClipCreatorPage() {
             </Link>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             {user && (
               <>
                 <Link
                   href="/library"
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-md hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                  className="flex items-center gap-2 px-2 sm:px-4 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-md hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
                 >
                   <Library className="w-4 h-4" />
-                  Clip Library
+                  <span className="hidden sm:inline">Clip Library</span>
                 </Link>
                 <Link
                   href="/clip-creator"
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-md hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                  className="flex items-center gap-2 px-2 sm:px-4 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-md hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
                 >
                   <Scissors className="w-4 h-4" />
-                  Clip Creator
+                  <span className="hidden sm:inline">Clip Creator</span>
                 </Link>
                 <button
                   onClick={() => setUploadModalOpen(true)}
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                  className="flex items-center gap-2 px-2 sm:px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
                 >
                   <Upload className="w-4 h-4" />
-                  Upload Clip
+                  <span className="hidden sm:inline">Upload Clip</span>
                 </button>
                 {selectedFile && (
                   <button
                     onClick={handleNewFile}
-                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-md hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                    className="flex items-center gap-2 px-2 sm:px-4 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-md hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
                   >
                     <Upload className="w-4 h-4" />
-                    Load New File
+                    <span className="hidden sm:inline">Load New File</span>
                   </button>
                 )}
               </>
@@ -194,8 +194,9 @@ export default function ClipCreatorPage() {
                     Create Audio Clips
                   </h2>
                   <p className="text-gray-600 max-w-2xl mx-auto">
-                    Load an audio file to extract short clips perfect for chorusing practice. 
-                    Select regions from longer recordings and save them with metadata.
+                    Load an audio file to extract short clips perfect for
+                    chorusing practice. Select regions from longer recordings
+                    and save them with metadata.
                   </p>
                 </div>
 
@@ -203,11 +204,11 @@ export default function ClipCreatorPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Select Audio File
                   </label>
-                  <div 
+                  <div
                     className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-                      isDragging 
-                        ? 'border-indigo-500 bg-indigo-50' 
-                        : 'border-gray-300 hover:border-gray-400'
+                      isDragging
+                        ? "border-indigo-500 bg-indigo-50"
+                        : "border-gray-300 hover:border-gray-400"
                     }`}
                     onDragOver={handleDragOver}
                     onDragLeave={handleDragLeave}
@@ -278,8 +279,8 @@ export default function ClipCreatorPage() {
                       Extract & Save
                     </h3>
                     <p className="text-sm text-gray-600">
-                      Add metadata and save your clip to the library for chorusing
-                      practice
+                      Add metadata and save your clip to the library for
+                      chorusing practice
                     </p>
                   </div>
                 </div>
@@ -292,25 +293,34 @@ export default function ClipCreatorPage() {
                 </h3>
                 <div className="space-y-4 text-sm text-gray-700">
                   <p>
-                    Audio can be downloaded from a few sources. The easiest are podcasts, since their audio is very easy to find and download. Check out this website (
-                    <a 
-                      href="https://podcasttomp3.com/" 
-                      target="_blank" 
+                    Audio can be downloaded from a few sources. The easiest are
+                    podcasts, since their audio is very easy to find and
+                    download. Check out this website (
+                    <a
+                      href="https://podcasttomp3.com/"
+                      target="_blank"
                       rel="noopener noreferrer"
                       className="text-indigo-600 hover:text-indigo-700 underline"
                     >
                       https://podcasttomp3.com/
                     </a>
-                    ) to download audio. Search for the podcast, choose an episode and click download!
+                    ) to download audio. Search for the podcast, choose an
+                    episode and click download!
                   </p>
                   <p>
-                    YouTube videos can also be a good source of audio, but downloading YouTube videos is much more difficult. It&apos;s a sensitive subject for YouTube as downloading videos can break copyright. But as you&apos;re using the audio for personal, educational purposes, you don&apos;t need to worry.
+                    YouTube videos can also be a good source of audio, but
+                    downloading YouTube videos is much more difficult. It&apos;s
+                    a sensitive subject for YouTube as downloading videos can
+                    break copyright. But as you&apos;re using the audio for
+                    personal, educational purposes, you don&apos;t need to
+                    worry.
                   </p>
                   <p>
-                    The best tool for downloading YouTube videos is called yt-dlp. It&apos;s freely available here:{" "}
-                    <a 
-                      href="https://github.com/yt-dlp/yt-dlp" 
-                      target="_blank" 
+                    The best tool for downloading YouTube videos is called
+                    yt-dlp. It&apos;s freely available here:{" "}
+                    <a
+                      href="https://github.com/yt-dlp/yt-dlp"
+                      target="_blank"
                       rel="noopener noreferrer"
                       className="text-indigo-600 hover:text-indigo-700 underline"
                     >
@@ -318,7 +328,12 @@ export default function ClipCreatorPage() {
                     </a>
                   </p>
                   <p>
-                    Or, you can try your luck searching for &quot;YouTube audio downloader&quot; or &quot;YouTube to mp3.&quot; These sites periodically get taken down, but there are always new ones you can find. They often have ads or other money making techniques on them, so use at your own risk. Downloading audio from podcasts is much safer and easier.
+                    Or, you can try your luck searching for &quot;YouTube audio
+                    downloader&quot; or &quot;YouTube to mp3.&quot; These sites
+                    periodically get taken down, but there are always new ones
+                    you can find. They often have ads or other money making
+                    techniques on them, so use at your own risk. Downloading
+                    audio from podcasts is much safer and easier.
                   </p>
                 </div>
                 <div className="mt-6 flex flex-wrap gap-3 justify-center">

@@ -37,29 +37,29 @@ export default function HomePage() {
             <h1 className="text-2xl font-bold text-gray-900">Chorus Lab</h1>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             {user && (
               <>
                 <Link
                   href="/library"
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-md hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                  className="flex items-center gap-2 px-2 sm:px-4 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-md hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
                 >
                   <Library className="w-4 h-4" />
-                  Clip Library
+                  <span className="hidden sm:inline">Clip Library</span>
                 </Link>
                 <Link
                   href="/clip-creator"
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-md hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                  className="flex items-center gap-2 px-2 sm:px-4 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-md hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
                 >
                   <Scissors className="w-4 h-4" />
-                  Clip Creator
+                  <span className="hidden sm:inline">Clip Creator</span>
                 </Link>
                 <button
                   onClick={() => setUploadModalOpen(true)}
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                  className="flex items-center gap-2 px-2 sm:px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
                 >
                   <Upload className="w-4 h-4" />
-                  Upload Clip
+                  <span className="hidden sm:inline">Upload Clip</span>
                 </button>
               </>
             )}
@@ -85,10 +85,10 @@ export default function HomePage() {
         <div className="max-w-6xl mx-auto">
           {/* Hero Section */}
           <div className="text-center mb-12 mt-8">
-            <h2 className="text-4xl font-bold text-gray-900 mb-4">
+            <h2 className="text-2xl sm:text-4xl font-bold text-gray-900 mb-4">
               Master Languages Through Chorusing
             </h2>
-            <p className="text-xl text-gray-600 max-w-3xl mx-auto mb-6">
+            <p className="text-base sm:text-xl text-gray-600 max-w-3xl mx-auto mb-6">
               Practice pronunciation and listening skills with short audio
               clips. Repeat, perfect, and progress through the most effective
               language learning technique.

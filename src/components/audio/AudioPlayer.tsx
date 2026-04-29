@@ -119,7 +119,7 @@ export function AudioPlayer({
 
       {/* Controls */}
       {showControls && (
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           {/* Playback Controls */}
           <div className="flex items-center gap-2">
             <button
@@ -163,10 +163,16 @@ export function AudioPlayer({
               className={`audio-control-btn ${
                 playbackState.isLooping ? "text-indigo-600" : ""
               }`}
-              aria-label={playbackState.isLooping ? "Disable loop" : "Enable loop"}
-              title={playbackState.isLooping ? "Looping enabled" : "Enable looping"}
+              aria-label={
+                playbackState.isLooping ? "Disable loop" : "Enable loop"
+              }
+              title={
+                playbackState.isLooping ? "Looping enabled" : "Enable looping"
+              }
             >
-              <Repeat className={`w-4 h-4 ${playbackState.isLooping ? "fill-current" : ""}`} />
+              <Repeat
+                className={`w-4 h-4 ${playbackState.isLooping ? "fill-current" : ""}`}
+              />
             </button>
           </div>
 
