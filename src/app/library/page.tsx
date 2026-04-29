@@ -72,7 +72,7 @@ export default function LibraryPage() {
 
       <div className="p-4">
         <div className="max-w-6xl mx-auto">
-          <div className="bg-white rounded-xl p-8 shadow-sm border border-gray-200">
+          <div className="bg-white rounded-xl p-4 sm:p-8 shadow-sm border border-gray-200">
             <Suspense
               fallback={
                 <div className="text-center py-8">Loading audio library...</div>

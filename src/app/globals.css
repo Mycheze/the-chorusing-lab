@@ -20,7 +20,9 @@
 
 /* Audio controls */
 .audio-control-btn {
-  @apply inline-flex items-center justify-center w-10 h-10 bg-white border border-gray-200 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors;
+  @apply inline-flex items-center justify-center w-12 h-12 sm:w-10 sm:h-10 bg-white border border-gray-200 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .audio-control-btn:disabled {
@@ -65,6 +67,53 @@
 /* Focus styles for accessibility */
 .focus-ring {
   @apply focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2;
+}
+
+/* Landscape phone overrides — short viewport where sm: breakpoint kicks in but vertical space is tight */
+@media (orientation: landscape) and (max-height: 500px) {
+  /* Keep clip info card collapsible (sm:hidden hides the toggle, sm:block shows full card — undo both) */
+  .clip-info-toggle {
+    display: flex !important;
+  }
+
+  .clip-info-expandable {
+    display: none !important;
+  }
+
+  .clip-info-expandable.is-expanded {
+    display: block !important;
+  }
+
+  /* Slim down the header */
+  .chorus-header {
+    padding-top: 0.5rem !important;
+    padding-bottom: 0.5rem !important;
+  }
+
+  /* Hide the "Chorusing Practice" heading and welcome text — just show back + clip title */
+  .chorus-heading {
+    display: none !important;
+  }
+
+  /* Hide keyboard shortcut hints to save space */
+  .keyboard-hints {
+    display: none !important;
+  }
+
+  /* Reduce waveform height */
+  .waveform-container {
+    height: 5rem !important;
+  }
+
+  /* Reduce page padding */
+  .chorus-content {
+    padding: 0.5rem !important;
+  }
+
+  /* Reduce spacing between sections */
+  .chorus-sections {
+    gap: 0.75rem !important;
+  }
 }
 
 /* WaveSurfer.js overrides for consistent styling */

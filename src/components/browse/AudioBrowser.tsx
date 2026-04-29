@@ -70,6 +70,10 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
     null,
   );
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [expandedSpeakerInfo, setExpandedSpeakerInfo] = useState<string | null>(
+    null,
+  );
+  const [expandedFileInfo, setExpandedFileInfo] = useState<string | null>(null);
 
   // Initialize state from URL params
   const [filters, setFilters] = useState<AudioFilters>(() => {
@@ -84,8 +88,19 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
     const speedFilter = searchParams.get("speedFilter");
 
     if (language) urlFilters.language = language;
-    if (speakerGender) urlFilters.speakerGender = speakerGender as any;
-    if (speakerAgeRange) urlFilters.speakerAgeRange = speakerAgeRange as any;
+    if (speakerGender && ["male", "female", "other"].includes(speakerGender)) {
+      urlFilters.speakerGender = speakerGender as "male" | "female" | "other";
+    }
+    if (
+      speakerAgeRange &&
+      ["teen", "younger-adult", "adult", "senior"].includes(speakerAgeRange)
+    ) {
+      urlFilters.speakerAgeRange = speakerAgeRange as
+        | "teen"
+        | "younger-adult"
+        | "adult"
+        | "senior";
+    }
     if (speakerDialect) urlFilters.speakerDialect = speakerDialect;
     if (tags) urlFilters.tags = tags.split(",").filter(Boolean);
     if (speedFilter && ["slow", "medium", "fast"].includes(speedFilter)) {
@@ -108,7 +123,8 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
   const [searchTerm, setSearchTerm] = useState(
     () => searchParams?.get("search") || "",
   );
-  const [showFilters, setShowFilters] = useState(true);
+  const [showFilters, setShowFilters] = useState(false);
+  const [showSort, setShowSort] = useState(false);
   const [showStarred, setShowStarred] = useState(
     () => searchParams?.get("starred") === "true",
   );
@@ -1090,43 +1106,94 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
       )}
 
       {/* Sort Controls */}
-      <div className="flex gap-2 text-sm flex-wrap">
-        <span className="text-gray-600">Sort by:</span>
-        {(
-          [
-            { field: "voteScore" as const, label: "Vote Score (Best First)" },
-            {
-              field: "difficulty" as const,
-              label: "Difficulty (Easiest First)",
-            },
-            {
-              field: "charactersPerSecond" as const,
-              label: "Speed (Slowest First)",
-            },
-            { field: "title" as const, label: "Title" },
-            { field: "duration" as const, label: "Duration" },
-            { field: "language" as const, label: "Language" },
-            { field: "createdAt" as const, label: "Newest First" },
-          ] as const
-        ).map(({ field, label }) => (
-          <button
-            key={field}
-            onClick={() => handleSortChange(field)}
-            className={`flex items-center gap-1 px-2 py-1 rounded hover:bg-gray-100 ${
-              sort.field === field
-                ? "bg-indigo-50 text-indigo-700"
-                : "text-gray-600"
-            }`}
-          >
-            {label}
-            {sort.field === field &&
-              (sort.direction === "asc" ? (
-                <ChevronUp className="w-3 h-3" />
-              ) : (
-                <ChevronDown className="w-3 h-3" />
-              ))}
-          </button>
-        ))}
+      <div>
+        <button
+          onClick={() => setShowSort(!showSort)}
+          className={`flex items-center gap-2 px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm ${
+            showSort
+              ? "bg-indigo-50 border-indigo-300 text-indigo-700"
+              : "border-gray-300 text-gray-700 hover:bg-gray-50"
+          }`}
+        >
+          <ArrowUpDown className="w-4 h-4" />
+          Sort:{" "}
+          {{
+            voteScore: "Votes",
+            difficulty: "Difficulty",
+            charactersPerSecond: "Speed",
+            title: "Title",
+            duration: "Duration",
+            language: "Language",
+            createdAt: "Newest",
+          }[sort.field] || sort.field}
+          {sort.direction === "asc" ? (
+            <ChevronUp className="w-3 h-3" />
+          ) : (
+            <ChevronDown className="w-3 h-3" />
+          )}
+        </button>
+        {showSort && (
+          <div className="flex gap-2 text-sm flex-wrap mt-2">
+            {(
+              [
+                {
+                  field: "voteScore" as const,
+                  label: "Vote Score (Best First)",
+                  mobileLabel: "Votes",
+                },
+                {
+                  field: "difficulty" as const,
+                  label: "Difficulty (Easiest First)",
+                  mobileLabel: "Difficulty",
+                },
+                {
+                  field: "charactersPerSecond" as const,
+                  label: "Speed (Slowest First)",
+                  mobileLabel: "Speed",
+                },
+                {
+                  field: "title" as const,
+                  label: "Title",
+                  mobileLabel: "Title",
+                },
+                {
+                  field: "duration" as const,
+                  label: "Duration",
+                  mobileLabel: "Length",
+                },
+                {
+                  field: "language" as const,
+                  label: "Language",
+                  mobileLabel: "Lang",
+                },
+                {
+                  field: "createdAt" as const,
+                  label: "Newest First",
+                  mobileLabel: "New",
+                },
+              ] as const
+            ).map(({ field, label, mobileLabel }) => (
+              <button
+                key={field}
+                onClick={() => handleSortChange(field)}
+                className={`flex items-center gap-1 px-2 py-1 rounded hover:bg-gray-100 ${
+                  sort.field === field
+                    ? "bg-indigo-50 text-indigo-700"
+                    : "text-gray-600"
+                }`}
+              >
+                <span className="sm:hidden">{mobileLabel}</span>
+                <span className="hidden sm:inline">{label}</span>
+                {sort.field === field &&
+                  (sort.direction === "asc" ? (
+                    <ChevronUp className="w-3 h-3" />
+                  ) : (
+                    <ChevronDown className="w-3 h-3" />
+                  ))}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Clips List */}
@@ -1164,14 +1231,15 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
           <div className="divide-y divide-gray-200">
             {filteredClips.map((clip, index) => (
               <div key={clip.id} className="hover:bg-gray-50">
-                {/* Clip Header - Now fully clickable */}
+                {/* Clip Header - Fully clickable */}
                 <div
                   className="p-4 cursor-pointer"
                   onClick={() => toggleExpanded(clip.id)}
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4 flex-1 min-w-0">
-                      <div className="text-gray-400 hover:text-gray-600">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                    <div className="flex items-start md:items-center gap-4 flex-1 min-w-0">
+                      {/* Chevron: hidden on mobile, visible on desktop */}
+                      <div className="hidden md:block text-gray-400 hover:text-gray-600">
                         {expandedClip === clip.id ? (
                           <ChevronDown className="w-5 h-5" />
                         ) : (
@@ -1180,9 +1248,11 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
                       </div>
 
                       <div className="flex-1 min-w-0">
-                        <h3 className="font-medium text-gray-900 truncate">
+                        {/* Title: 2 lines on mobile, 1 line on desktop */}
+                        <h3 className="font-medium text-gray-900 line-clamp-2 md:line-clamp-1 md:truncate">
                           {clip.title}
                         </h3>
+                        {/* Compact metadata */}
                         <div className="flex items-center gap-4 text-sm text-gray-500 mt-1 flex-wrap">
                           <span className="flex items-center gap-1">
                             <Clock className="w-3 h-3" />
@@ -1195,15 +1265,15 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
                               {clip.metadata.speakerGender}
                             </span>
                           )}
-                          <span>{formatDate(clip.createdAt)}</span>
+                          {/* Desktop-only metadata items */}
                           {clip.starCount > 0 && (
-                            <span className="flex items-center gap-1 text-yellow-600">
+                            <span className="hidden md:flex items-center gap-1 text-yellow-600">
                               <Star className="w-3 h-3 fill-current" />
                               {clip.starCount}
                             </span>
                           )}
                           {clip.difficultyRating && (
-                            <span className="flex items-center gap-1 text-blue-600">
+                            <span className="hidden md:flex items-center gap-1 text-blue-600">
                               <Star className="w-3 h-3 fill-current" />
                               {clip.difficultyRating.toFixed(1)}
                               {(clip.difficultyRatingCount ?? 0) > 0 && (
@@ -1218,7 +1288,7 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
                           (clip.upvoteCount ?? 0) > 0 ||
                           (clip.downvoteCount ?? 0) > 0 ? (
                             <span
-                              className={`flex items-center gap-1 ${
+                              className={`hidden md:flex items-center gap-1 ${
                                 (clip.voteScore ?? 0) > 0
                                   ? "text-green-600"
                                   : (clip.voteScore ?? 0) < 0
@@ -1229,13 +1299,13 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
                               {(clip.voteScore ?? 0) > 0 ? "+" : ""}
                               {clip.voteScore ?? 0}
                               <span className="text-xs text-gray-500">
-                                ({clip.upvoteCount ?? 0}↑/
-                                {clip.downvoteCount ?? 0}↓)
+                                ({clip.upvoteCount ?? 0}/
+                                {clip.downvoteCount ?? 0})
                               </span>
                             </span>
                           ) : null}
                           {clip.charactersPerSecond && (
-                            <span className="flex items-center gap-1 text-purple-600">
+                            <span className="hidden md:flex items-center gap-1 text-purple-600">
                               {clip.charactersPerSecond.toFixed(1)} chars/s
                               {clip.speedCategory && (
                                 <span
@@ -1256,21 +1326,33 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
                       </div>
                     </div>
 
+                    {/* Action buttons */}
                     <div
-                      className="flex items-center gap-2"
+                      className="flex flex-col md:flex-row md:items-center gap-2 w-full md:w-auto md:pl-0"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      {/* NEW: Chorus Now Button */}
-                      <Link
-                        href={`/chorus/${clip.id}`}
-                        className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 text-sm font-medium"
-                      >
-                        <Zap className="w-4 h-4" />
-                        Chorus Now!
-                      </Link>
+                      {/* Chorus + Play buttons: always visible */}
+                      <div className="flex items-center gap-2">
+                        <Link
+                          href={`/chorus/${clip.id}`}
+                          className="flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 text-sm font-medium"
+                        >
+                          <Zap className="w-4 h-4" />
+                          <span>Chorus</span>
+                        </Link>
 
+                        <button
+                          onClick={() => handlePlay(clip.id)}
+                          className="flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 text-sm font-medium"
+                        >
+                          <Play className="w-4 h-4" />
+                          <span>Play</span>
+                        </button>
+                      </div>
+
+                      {/* Star/Edit/Delete: hidden on mobile, shown on desktop */}
                       {user && (
-                        <>
+                        <div className="hidden md:flex items-center gap-1">
                           <button
                             onClick={() =>
                               handleStar(clip.id, clip.isStarredByUser)
@@ -1287,7 +1369,6 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
                               }`}
                             />
                           </button>
-                          {/* Only show edit button for clips uploaded by current user or admins */}
                           {(clip.uploadedBy === user.id || user.isAdmin) && (
                             <button
                               onClick={() => handleEdit(clip)}
@@ -1296,7 +1377,6 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
                               <Edit className="w-4 h-4" />
                             </button>
                           )}
-                          {/* Only show delete button for clips uploaded by current user or admins */}
                           {(clip.uploadedBy === user.id || user.isAdmin) && (
                             <button
                               onClick={() => handleDeleteRequest(clip)}
@@ -1306,31 +1386,67 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
                               <Trash2 className="w-4 h-4" />
                             </button>
                           )}
-                        </>
+                        </div>
                       )}
-                      <button
-                        onClick={() => handlePlay(clip.id)}
-                        className="flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-                      >
-                        <Play className="w-4 h-4" />
-                        Play
-                      </button>
                     </div>
                   </div>
 
-                  {/* Quick Info */}
+                  {/* Mobile stats/tags line: chars/s + speed badge + tags */}
+                  <div className="md:hidden mt-2 flex items-center gap-2 flex-wrap text-xs text-gray-500">
+                    {clip.charactersPerSecond && (
+                      <span className="flex items-center gap-1 text-purple-600">
+                        {clip.charactersPerSecond.toFixed(1)} char/s
+                        {clip.speedCategory && (
+                          <span
+                            className={`ml-1 px-1.5 py-0.5 rounded ${
+                              clip.speedCategory === "slow"
+                                ? "bg-blue-100 text-blue-700"
+                                : clip.speedCategory === "medium"
+                                  ? "bg-yellow-100 text-yellow-700"
+                                  : "bg-orange-100 text-orange-700"
+                            }`}
+                          >
+                            {clip.speedCategory}
+                          </span>
+                        )}
+                      </span>
+                    )}
+                    {clip.metadata.tags.length > 0 && (
+                      <>
+                        {clip.metadata.tags
+                          .slice(0, 3)
+                          .map((tag: string, tagIndex: number) => (
+                            <span
+                              key={tagIndex}
+                              className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded-full"
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                        {clip.metadata.tags.length > 3 && (
+                          <span className="text-gray-400">
+                            +{clip.metadata.tags.length - 3}
+                          </span>
+                        )}
+                      </>
+                    )}
+                  </div>
+
+                  {/* Desktop tags row (hidden on mobile, shown via stats/tags line above instead) */}
                   {clip.metadata.tags.length > 0 && (
-                    <div className="flex items-center gap-2 mt-2">
+                    <div className="hidden md:flex items-center gap-2 mt-2">
                       <Tag className="w-3 h-3 text-gray-400" />
                       <div className="flex gap-1 flex-wrap">
-                        {clip.metadata.tags.slice(0, 3).map((tag, tagIndex) => (
-                          <span
-                            key={tagIndex}
-                            className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded-full"
-                          >
-                            {tag}
-                          </span>
-                        ))}
+                        {clip.metadata.tags
+                          .slice(0, 3)
+                          .map((tag: string, tagIndex: number) => (
+                            <span
+                              key={tagIndex}
+                              className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded-full"
+                            >
+                              {tag}
+                            </span>
+                          ))}
                         {clip.metadata.tags.length > 3 && (
                           <span className="text-xs text-gray-500">
                             +{clip.metadata.tags.length - 3} more
@@ -1344,11 +1460,56 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
                 {/* Expanded Details */}
                 {expandedClip === clip.id && (
                   <div className="px-4 pb-4 space-y-4 border-t border-gray-200 bg-gray-50">
+                    {/* Mobile-only: Star/Edit/Delete buttons at top of expanded section */}
+                    {user && (
+                      <div
+                        className="flex md:hidden items-center gap-2 mt-4"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <button
+                          onClick={() =>
+                            handleStar(clip.id, clip.isStarredByUser)
+                          }
+                          className={`flex items-center gap-1 px-3 py-1.5 rounded-md border text-sm ${
+                            clip.isStarredByUser
+                              ? "text-yellow-600 border-yellow-300 bg-yellow-50"
+                              : "text-gray-500 border-gray-300 bg-white"
+                          }`}
+                        >
+                          <Star
+                            className={`w-4 h-4 ${
+                              clip.isStarredByUser ? "fill-current" : ""
+                            }`}
+                          />
+                          Star
+                        </button>
+                        {(clip.uploadedBy === user.id || user.isAdmin) && (
+                          <button
+                            onClick={() => handleEdit(clip)}
+                            className="flex items-center gap-1 px-3 py-1.5 rounded-md border border-gray-300 bg-white text-gray-500 text-sm hover:text-gray-700"
+                          >
+                            <Edit className="w-4 h-4" />
+                            Edit
+                          </button>
+                        )}
+                        {(clip.uploadedBy === user.id || user.isAdmin) && (
+                          <button
+                            onClick={() => handleDeleteRequest(clip)}
+                            className="flex items-center gap-1 px-3 py-1.5 rounded-md border border-gray-300 bg-white text-gray-400 text-sm hover:text-red-600 hover:border-red-300"
+                            title="Delete clip"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            Delete
+                          </button>
+                        )}
+                      </div>
+                    )}
+
                     {/* Audio Player */}
                     {playingClip === clip.id && (
                       <div className="bg-white rounded-lg p-4 mt-4">
                         <AudioPlayer
-                          key={clip.id} // Force new instance for each clip
+                          key={clip.id}
                           url={clip.url}
                           title={clip.title}
                           showControls={true}
@@ -1358,37 +1519,74 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
 
                     {/* Metadata */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mt-4">
+                      {/* Speaker Info -- collapsible */}
                       <div>
-                        <h4 className="font-medium text-gray-900 mb-2">
+                        <button
+                          type="button"
+                          className="flex items-center gap-1 font-medium text-gray-900 mb-2"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setExpandedSpeakerInfo((v) =>
+                              v === clip.id ? null : clip.id,
+                            );
+                          }}
+                        >
+                          {expandedSpeakerInfo === clip.id ? (
+                            <ChevronDown className="w-4 h-4" />
+                          ) : (
+                            <ChevronRight className="w-4 h-4" />
+                          )}
                           Speaker Info
-                        </h4>
-                        <div className="space-y-1 text-gray-600">
-                          {clip.metadata.speakerGender && (
-                            <div>Gender: {clip.metadata.speakerGender}</div>
-                          )}
-                          {clip.metadata.speakerAgeRange && (
-                            <div>
-                              Age:{" "}
-                              {clip.metadata.speakerAgeRange.replace("-", " ")}
-                            </div>
-                          )}
-                          {clip.metadata.speakerDialect && (
-                            <div>Dialect: {clip.metadata.speakerDialect}</div>
-                          )}
-                        </div>
+                        </button>
+                        {expandedSpeakerInfo === clip.id && (
+                          <div className="space-y-1 text-gray-600 ml-5">
+                            {clip.metadata.speakerGender && (
+                              <div>Gender: {clip.metadata.speakerGender}</div>
+                            )}
+                            {clip.metadata.speakerAgeRange && (
+                              <div>
+                                Age:{" "}
+                                {clip.metadata.speakerAgeRange.replace(
+                                  "-",
+                                  " ",
+                                )}
+                              </div>
+                            )}
+                            {clip.metadata.speakerDialect && (
+                              <div>Dialect: {clip.metadata.speakerDialect}</div>
+                            )}
+                          </div>
+                        )}
                       </div>
 
+                      {/* File Info -- collapsible */}
                       <div>
-                        <h4 className="font-medium text-gray-900 mb-2">
+                        <button
+                          type="button"
+                          className="flex items-center gap-1 font-medium text-gray-900 mb-2"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setExpandedFileInfo((v) =>
+                              v === clip.id ? null : clip.id,
+                            );
+                          }}
+                        >
+                          {expandedFileInfo === clip.id ? (
+                            <ChevronDown className="w-4 h-4" />
+                          ) : (
+                            <ChevronRight className="w-4 h-4" />
+                          )}
                           File Info
-                        </h4>
-                        <div className="space-y-1 text-gray-600">
-                          <div>
-                            Size: {(clip.fileSize / 1024).toFixed(1)} KB
+                        </button>
+                        {expandedFileInfo === clip.id && (
+                          <div className="space-y-1 text-gray-600 ml-5">
+                            <div>
+                              Size: {(clip.fileSize / 1024).toFixed(1)} KB
+                            </div>
+                            <div>Original: {clip.originalFilename}</div>
+                            <div>Uploaded: {formatDate(clip.createdAt)}</div>
                           </div>
-                          <div>Original: {clip.originalFilename}</div>
-                          <div>Uploaded: {formatDate(clip.createdAt)}</div>
-                        </div>
+                        )}
                       </div>
                     </div>
 
@@ -1425,14 +1623,16 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
                           All Tags
                         </h4>
                         <div className="flex gap-1 flex-wrap">
-                          {clip.metadata.tags.map((tag, tagIndex) => (
-                            <span
-                              key={tagIndex}
-                              className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded-full"
-                            >
-                              {tag}
-                            </span>
-                          ))}
+                          {clip.metadata.tags.map(
+                            (tag: string, tagIndex: number) => (
+                              <span
+                                key={tagIndex}
+                                className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded-full"
+                              >
+                                {tag}
+                              </span>
+                            ),
+                          )}
                         </div>
                       </div>
                     )}

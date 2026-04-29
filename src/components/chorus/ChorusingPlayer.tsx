@@ -75,6 +75,7 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
   // Use refs for loop and region state to avoid stale closures in event handlers
   const loopRef = useRef(false);
   const regionRef = useRef<AudioRegion | null>(null);
+  const trackLoopRef = useRef<() => void>(() => {});
 
   // Track session for stats
   const { trackLoop, trackRestart } = useClipSessionTracking({
@@ -90,6 +91,10 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
   useEffect(() => {
     regionRef.current = region;
   }, [region]);
+
+  useEffect(() => {
+    trackLoopRef.current = trackLoop;
+  }, [trackLoop]);
 
   /* ----------  Robust destroy helper  ------------------------------ */
   const destroy = useCallback((ws?: WaveSurferInstance | null) => {
@@ -260,7 +265,7 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
 
           if (currentLoop) {
             // Loop is enabled - handle looping directly in finish event
-            trackLoop();
+            trackLoopRef.current();
 
             // Temporarily disable regions to allow seeks
             const regions = regionsRef.current;
@@ -813,7 +818,11 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
     <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 space-y-6">
       {/* Waveform */}
       <div className="bg-gray-50 rounded-lg border border-gray-200 overflow-hidden relative">
-        <div ref={waveformRef} data-debug-ws className="w-full min-h-[120px]" />
+        <div
+          ref={waveformRef}
+          data-debug-ws
+          className="w-full min-h-[120px] touch-none"
+        />
         {loading && (
           <div className="absolute inset-0 flex items-center justify-center bg-gray-50/90">
             <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
@@ -831,30 +840,32 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
       {isReady && (
         <div className="space-y-4">
           {/* Main controls */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            {/* Playback buttons + time */}
-            <div className="flex items-center justify-between sm:justify-start gap-2">
-              <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:grid sm:grid-cols-2 sm:gap-x-6 sm:gap-y-3 md:flex md:flex-row md:items-center md:justify-between gap-3">
+            {/* Playback buttons + time — sm:contents flattens children into the grid */}
+            <div className="flex flex-col sm:contents md:flex md:flex-row md:items-center gap-2">
+              <div className="flex items-center gap-2 sm:col-start-1 sm:row-start-1">
                 <button onClick={playPause} className="audio-control-btn">
                   {isPlaying ? (
-                    <Pause className="w-4 h-4" />
+                    <Pause className="w-5 h-5 sm:w-4 sm:h-4" />
                   ) : (
-                    <Play className="w-4 h-4" />
+                    <Play className="w-5 h-5 sm:w-4 sm:h-4" />
                   )}
                 </button>
                 <button onClick={stop} className="audio-control-btn">
-                  <Square className="w-4 h-4" />
+                  <Square className="w-5 h-5 sm:w-4 sm:h-4" />
                 </button>
                 <button onClick={restart} className="audio-control-btn">
-                  <RotateCcw className="w-4 h-4" />
+                  <RotateCcw className="w-5 h-5 sm:w-4 sm:h-4" />
                 </button>
                 <button
                   onClick={() => setLoop(!loop)}
                   className={`audio-control-btn ${
-                    loop ? "bg-indigo-100 text-indigo-700" : ""
+                    loop
+                      ? "!bg-indigo-600 !text-white hover:!bg-indigo-700 !border-indigo-600"
+                      : ""
                   }`}
                 >
-                  <Repeat className="w-4 h-4" />
+                  <Repeat className="w-5 h-5 sm:w-4 sm:h-4" />
                 </button>
                 {region && (
                   <button
@@ -866,7 +877,7 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
                 )}
               </div>
 
-              <div className="font-mono text-sm text-gray-600">
+              <div className="font-mono text-sm text-gray-600 mt-2 sm:mt-0 sm:col-start-1 sm:row-start-2">
                 {fmt(current)} / {fmt(originalDurationRef.current || duration)}
                 {playbackRate !== 1 && (
                   <span className="text-xs text-gray-500 ml-1">
@@ -876,104 +887,96 @@ export function ChorusingPlayer({ clip }: ChorusingPlayerProps) {
               </div>
             </div>
 
-            {/* Volume + Speed controls */}
-            <div className="flex items-center gap-4">
+            {/* Volume + Speed controls — sm:contents flattens children into the grid */}
+            <div className="flex flex-col sm:contents md:flex md:flex-col md:items-start gap-4">
               {/* Volume Control */}
-              <div className="flex flex-col gap-1">
-                <div className="flex items-center gap-2">
-                  <Volume2 className="w-4 h-4 text-gray-500" />
-                  <input
-                    type="range"
-                    min="0"
-                    max="3"
-                    step="0.05"
-                    value={volume}
-                    onChange={(e) => changeVolume(parseFloat(e.target.value))}
-                    className="w-16 sm:w-20"
-                  />
-                  <span className="text-xs text-gray-600 min-w-[3rem]">
-                    {Math.round(volume * 100)}%
-                  </span>
-                </div>
-                <div className="hidden sm:flex items-center justify-center gap-1 ml-6 w-20">
-                  <button
-                    onClick={handleVolumeDecrease}
-                    className="inline-flex items-center justify-center w-8 h-8 bg-white border border-gray-200 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors"
-                    aria-label="Decrease volume"
-                    title="Decrease volume (Shift for 10%)"
-                  >
-                    <Minus className="w-3 h-3" />
-                  </button>
-                  <button
-                    onClick={handleVolumeAdjust}
-                    className="inline-flex items-center justify-center w-8 h-8 bg-white border border-gray-200 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors"
-                    aria-label="Increase volume"
-                    title="Increase volume (Shift for 10%)"
-                  >
-                    <Plus className="w-3 h-3" />
-                  </button>
-                  <button
-                    onClick={handleVolumeReset}
-                    className="inline-flex items-center justify-center w-8 h-8 bg-white border border-gray-200 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors"
-                    aria-label="Reset volume to 100%"
-                    title="Reset volume to 100%"
-                  >
-                    <RotateCcw className="w-3 h-3" />
-                  </button>
-                </div>
+              <div className="flex items-center gap-2 sm:col-start-2 sm:row-start-1">
+                <Volume2 className="w-4 h-4 text-gray-500" />
+                <button
+                  onClick={handleVolumeDecrease}
+                  className="inline-flex items-center justify-center w-9 h-9 sm:w-8 sm:h-8 bg-white border border-gray-200 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors touch-manipulation"
+                  aria-label="Decrease volume"
+                  title="Decrease volume (Shift for 10%)"
+                >
+                  <Minus className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
+                </button>
+                <input
+                  type="range"
+                  min="0"
+                  max="3"
+                  step="0.05"
+                  value={volume}
+                  onChange={(e) => changeVolume(parseFloat(e.target.value))}
+                  className="w-24 sm:w-16 md:w-20 touch-manipulation"
+                />
+                <button
+                  onClick={handleVolumeAdjust}
+                  className="inline-flex items-center justify-center w-9 h-9 sm:w-8 sm:h-8 bg-white border border-gray-200 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors touch-manipulation"
+                  aria-label="Increase volume"
+                  title="Increase volume (Shift for 10%)"
+                >
+                  <Plus className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
+                </button>
+                <button
+                  onClick={handleVolumeReset}
+                  className="inline-flex items-center justify-center w-9 h-9 sm:w-8 sm:h-8 bg-white border border-gray-200 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors touch-manipulation"
+                  aria-label="Reset volume to 100%"
+                  title="Reset volume to 100%"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
+                </button>
+                <span className="text-xs text-gray-600 min-w-[3rem]">
+                  {Math.round(volume * 100)}%
+                </span>
               </div>
 
               {/* Speed Control */}
-              <div className="flex flex-col gap-1">
-                <div className="flex items-center gap-2">
-                  <Gauge className="w-4 h-4 text-gray-500" />
-                  <input
-                    type="range"
-                    min="0.5"
-                    max="2.0"
-                    step="0.05"
-                    value={playbackRate}
-                    onChange={(e) =>
-                      changePlaybackRate(parseFloat(e.target.value))
-                    }
-                    className="w-16 sm:w-20"
-                  />
-                  <span className="text-xs text-gray-600 min-w-[2.5rem]">
-                    {playbackRate.toFixed(2)}x
-                  </span>
-                </div>
-                <div className="hidden sm:flex items-center justify-center gap-1 ml-6 w-20">
-                  <button
-                    onClick={handleSpeedDecrease}
-                    className="inline-flex items-center justify-center w-8 h-8 bg-white border border-gray-200 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors"
-                    aria-label="Decrease speed"
-                    title="Decrease speed (Shift for 10%)"
-                  >
-                    <Minus className="w-3 h-3" />
-                  </button>
-                  <button
-                    onClick={handleSpeedAdjust}
-                    className="inline-flex items-center justify-center w-8 h-8 bg-white border border-gray-200 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors"
-                    aria-label="Increase speed"
-                    title="Increase speed (Shift for 10%)"
-                  >
-                    <Plus className="w-3 h-3" />
-                  </button>
-                  <button
-                    onClick={handleSpeedReset}
-                    className="inline-flex items-center justify-center w-8 h-8 bg-white border border-gray-200 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors"
-                    aria-label="Reset speed to 1.0x"
-                    title="Reset speed to 1.0x"
-                  >
-                    <RotateCcw className="w-3 h-3" />
-                  </button>
-                </div>
+              <div className="flex items-center gap-2 sm:col-start-2 sm:row-start-2">
+                <Gauge className="w-4 h-4 text-gray-500" />
+                <button
+                  onClick={handleSpeedDecrease}
+                  className="inline-flex items-center justify-center w-9 h-9 sm:w-8 sm:h-8 bg-white border border-gray-200 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors touch-manipulation"
+                  aria-label="Decrease speed"
+                  title="Decrease speed (Shift for 10%)"
+                >
+                  <Minus className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
+                </button>
+                <input
+                  type="range"
+                  min="0.5"
+                  max="2.0"
+                  step="0.05"
+                  value={playbackRate}
+                  onChange={(e) =>
+                    changePlaybackRate(parseFloat(e.target.value))
+                  }
+                  className="w-24 sm:w-16 md:w-20 touch-manipulation"
+                />
+                <button
+                  onClick={handleSpeedAdjust}
+                  className="inline-flex items-center justify-center w-9 h-9 sm:w-8 sm:h-8 bg-white border border-gray-200 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors touch-manipulation"
+                  aria-label="Increase speed"
+                  title="Increase speed (Shift for 10%)"
+                >
+                  <Plus className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
+                </button>
+                <button
+                  onClick={handleSpeedReset}
+                  className="inline-flex items-center justify-center w-9 h-9 sm:w-8 sm:h-8 bg-white border border-gray-200 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors touch-manipulation"
+                  aria-label="Reset speed to 1.0x"
+                  title="Reset speed to 1.0x"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
+                </button>
+                <span className="text-xs text-gray-600 min-w-[2.5rem]">
+                  {playbackRate.toFixed(2)}x
+                </span>
               </div>
             </div>
           </div>
 
           {/* Keyboard Shortcuts Info - hidden on mobile */}
-          <div className="hidden sm:block text-xs text-gray-600 bg-gray-50 rounded-md p-3">
+          <div className="keyboard-hints hidden sm:block text-xs text-gray-600 bg-gray-50 rounded-md p-3">
             <p>
               <kbd className="keyboard-hint">Space</kbd> Play/Pause •{" "}
               <kbd className="keyboard-hint">S</kbd> Stop •{" "}
