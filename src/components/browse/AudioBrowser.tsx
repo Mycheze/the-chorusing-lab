@@ -465,6 +465,15 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
     loadPreferences();
   }, [user, searchParams, updateURL, searchTerm]);
 
+  // Reset preferences-loaded flag on unmount so returning to /library re-applies them.
+  // AudioBrowser is remounted via the `key` prop on LibraryPage when refreshBrowser changes
+  // or the user navigates back; this ensures saved preferences re-apply each time.
+  useEffect(() => {
+    return () => {
+      preferencesLoadedRef.current = false;
+    };
+  }, []);
+
   const fetchClips = useCallback(
     async (isFilterChange: boolean = false, retryCount = 0) => {
       // Track fetch generation to discard stale results when multiple fetches race
@@ -932,6 +941,17 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
 
       {/* Search and Filter Controls */}
       <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Language
+          </label>
+          <LanguageSelector
+            value={filters.language || ""}
+            onChange={handleLanguageFilterChange}
+            className="w-full sm:max-w-xs"
+            clipCounts={languageCounts}
+          />
+        </div>
         <div className="flex gap-4">
           <div className="flex-1">
             <div className="relative">
@@ -960,18 +980,6 @@ export function AudioBrowser({ onRefresh }: AudioBrowserProps) {
 
         {showFilters && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pt-4 border-t border-gray-200">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Language
-              </label>
-              <LanguageSelector
-                value={filters.language || ""}
-                onChange={handleLanguageFilterChange}
-                className="w-full"
-                clipCounts={languageCounts}
-              />
-            </div>
-
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Speaker Gender
