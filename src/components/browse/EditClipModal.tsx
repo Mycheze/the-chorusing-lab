@@ -1,10 +1,11 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { X, AlertCircle, Edit } from 'lucide-react';
-import { useAuth } from '@/lib/auth';
-import { LanguageSelector } from '@/components/ui/LanguageSelector';
-import type { AudioClip, AudioMetadata } from '@/types/audio';
+import { useState } from "react";
+import { X, AlertCircle, Edit } from "lucide-react";
+import { useAuth } from "@/lib/auth";
+import { LanguageSelector } from "@/components/ui/LanguageSelector";
+import { canonicalizeLanguage } from "@/lib/language";
+import type { AudioClip, AudioMetadata } from "@/types/audio";
 
 interface EditClipModalProps {
   clip: AudioClip;
@@ -16,52 +17,61 @@ interface EditClipModalProps {
 interface EditFormData {
   title: string;
   language: string;
-  speakerGender: 'male' | 'female' | 'other' | '';
-  speakerAgeRange: 'teen' | 'younger-adult' | 'adult' | 'senior' | '';
+  speakerGender: "male" | "female" | "other" | "";
+  speakerAgeRange: "teen" | "younger-adult" | "adult" | "senior" | "";
   speakerDialect: string;
   transcript: string;
   sourceUrl: string;
   tags: string;
 }
 
-export function EditClipModal({ clip, isOpen, onClose, onSuccess }: EditClipModalProps) {
+export function EditClipModal({
+  clip,
+  isOpen,
+  onClose,
+  onSuccess,
+}: EditClipModalProps) {
   const { user } = useAuth();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   const [formData, setFormData] = useState<EditFormData>({
     title: clip.title,
-    language: clip.metadata.language,
-    speakerGender: clip.metadata.speakerGender || '',
-    speakerAgeRange: clip.metadata.speakerAgeRange || '',
-    speakerDialect: clip.metadata.speakerDialect || '',
-    transcript: clip.metadata.transcript || '',
-    sourceUrl: clip.metadata.sourceUrl || '',
-    tags: clip.metadata.tags.join(', '),
+    language: canonicalizeLanguage(clip.metadata.language),
+    speakerGender: clip.metadata.speakerGender || "",
+    speakerAgeRange: clip.metadata.speakerAgeRange || "",
+    speakerDialect: clip.metadata.speakerDialect || "",
+    transcript: clip.metadata.transcript || "",
+    sourceUrl: clip.metadata.sourceUrl || "",
+    tags: clip.metadata.tags.join(", "),
   });
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+  const handleInputChange = (
+    e: React.ChangeEvent<
+      HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+    >,
+  ) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleLanguageChange = (language: string) => {
-    setFormData(prev => ({ ...prev, language }));
+    setFormData((prev) => ({ ...prev, language }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!user) return;
 
     // Validate required fields
     if (!formData.title.trim()) {
-      setError('Title is required');
+      setError("Title is required");
       return;
     }
 
     if (!formData.language.trim()) {
-      setError('Language is required');
+      setError("Language is required");
       return;
     }
 
@@ -72,18 +82,23 @@ export function EditClipModal({ clip, isOpen, onClose, onSuccess }: EditClipModa
       // Prepare metadata
       const metadata: AudioMetadata = {
         language: formData.language,
-        speakerGender: formData.speakerGender as any || undefined,
-        speakerAgeRange: formData.speakerAgeRange as any || undefined,
+        speakerGender: (formData.speakerGender as any) || undefined,
+        speakerAgeRange: (formData.speakerAgeRange as any) || undefined,
         speakerDialect: formData.speakerDialect.trim() || undefined,
         transcript: formData.transcript.trim() || undefined,
         sourceUrl: formData.sourceUrl.trim() || undefined,
-        tags: formData.tags ? formData.tags.split(',').map(tag => tag.trim()).filter(Boolean) : [],
+        tags: formData.tags
+          ? formData.tags
+              .split(",")
+              .map((tag) => tag.trim())
+              .filter(Boolean)
+          : [],
       };
 
       const response = await fetch(`/api/clips/${clip.id}`, {
-        method: 'PUT',
+        method: "PUT",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           title: formData.title.trim(),
@@ -93,13 +108,13 @@ export function EditClipModal({ clip, isOpen, onClose, onSuccess }: EditClipModa
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Update failed');
+        throw new Error(errorData.error || "Update failed");
       }
 
       const data = await response.json();
       onSuccess(data.clip);
     } catch (error) {
-      setError(error instanceof Error ? error.message : 'Update failed');
+      setError(error instanceof Error ? error.message : "Update failed");
     } finally {
       setSaving(false);
     }
@@ -135,18 +150,25 @@ export function EditClipModal({ clip, isOpen, onClose, onSuccess }: EditClipModa
 
           {/* File Info (Read-only) */}
           <div className="bg-gray-50 rounded-lg p-4">
-            <h3 className="text-sm font-medium text-gray-900 mb-2">File Information</h3>
+            <h3 className="text-sm font-medium text-gray-900 mb-2">
+              File Information
+            </h3>
             <div className="grid grid-cols-2 gap-4 text-sm text-gray-600">
               <div>Original: {clip.originalFilename}</div>
               <div>Size: {(clip.fileSize / 1024).toFixed(1)} KB</div>
               <div>Duration: {clip.duration.toFixed(1)}s</div>
-              <div>Uploaded: {new Date(clip.createdAt).toLocaleDateString()}</div>
+              <div>
+                Uploaded: {new Date(clip.createdAt).toLocaleDateString()}
+              </div>
             </div>
           </div>
 
           {/* Title */}
           <div>
-            <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-1">
+            <label
+              htmlFor="title"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
               Title *
             </label>
             <input
@@ -163,7 +185,10 @@ export function EditClipModal({ clip, isOpen, onClose, onSuccess }: EditClipModa
 
           {/* Language */}
           <div>
-            <label htmlFor="language" className="block text-sm font-medium text-gray-700 mb-1">
+            <label
+              htmlFor="language"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
               Language *
             </label>
             <LanguageSelector
@@ -177,7 +202,10 @@ export function EditClipModal({ clip, isOpen, onClose, onSuccess }: EditClipModa
           {/* Speaker Info */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label htmlFor="speakerGender" className="block text-sm font-medium text-gray-700 mb-1">
+              <label
+                htmlFor="speakerGender"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
                 Speaker Gender
               </label>
               <select
@@ -195,7 +223,10 @@ export function EditClipModal({ clip, isOpen, onClose, onSuccess }: EditClipModa
             </div>
 
             <div>
-              <label htmlFor="speakerAgeRange" className="block text-sm font-medium text-gray-700 mb-1">
+              <label
+                htmlFor="speakerAgeRange"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
                 Speaker Age Range
               </label>
               <select
@@ -216,7 +247,10 @@ export function EditClipModal({ clip, isOpen, onClose, onSuccess }: EditClipModa
 
           {/* Speaker Dialect */}
           <div>
-            <label htmlFor="speakerDialect" className="block text-sm font-medium text-gray-700 mb-1">
+            <label
+              htmlFor="speakerDialect"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
               Speaker Dialect
             </label>
             <input
@@ -232,7 +266,10 @@ export function EditClipModal({ clip, isOpen, onClose, onSuccess }: EditClipModa
 
           {/* Transcript */}
           <div>
-            <label htmlFor="transcript" className="block text-sm font-medium text-gray-700 mb-1">
+            <label
+              htmlFor="transcript"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
               Transcript
             </label>
             <textarea
@@ -248,7 +285,10 @@ export function EditClipModal({ clip, isOpen, onClose, onSuccess }: EditClipModa
 
           {/* Source URL */}
           <div>
-            <label htmlFor="sourceUrl" className="block text-sm font-medium text-gray-700 mb-1">
+            <label
+              htmlFor="sourceUrl"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
               Source URL
             </label>
             <input
@@ -264,7 +304,10 @@ export function EditClipModal({ clip, isOpen, onClose, onSuccess }: EditClipModa
 
           {/* Tags */}
           <div>
-            <label htmlFor="tags" className="block text-sm font-medium text-gray-700 mb-1">
+            <label
+              htmlFor="tags"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
               Tags
             </label>
             <input
@@ -276,7 +319,9 @@ export function EditClipModal({ clip, isOpen, onClose, onSuccess }: EditClipModa
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
               placeholder="beginner, pronunciation, greetings, formal"
             />
-            <p className="text-xs text-gray-500 mt-1">Separate tags with commas</p>
+            <p className="text-xs text-gray-500 mt-1">
+              Separate tags with commas
+            </p>
           </div>
 
           {/* Submit */}
