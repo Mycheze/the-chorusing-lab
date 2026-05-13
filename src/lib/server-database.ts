@@ -16,6 +16,7 @@ import { getPublicUrl, deleteAudioFile, supabaseService } from "@/lib/supabase";
 import { isAdmin } from "@/lib/admin";
 import { supabaseMonitor } from "@/lib/supabase-monitor";
 import { retryWithBackoff, isTransientError } from "@/lib/api-utils";
+import { canonicalizeLanguage } from "@/lib/language";
 
 // Track server client instance
 supabaseMonitor.registerClient("server");
@@ -96,7 +97,7 @@ class SupabaseDatabase {
       const { data, error } = await db
         .from("audio_clips")
         .select("speaker_dialect")
-        .eq("language", language)
+        .eq("language", canonicalizeLanguage(language))
         .not("speaker_dialect", "is", null);
 
       if (error) {
@@ -264,7 +265,7 @@ class SupabaseDatabase {
           query = query.eq("uploaded_by", filters.uploadedBy);
         }
         if (filters.language) {
-          query = query.eq("language", filters.language);
+          query = query.eq("language", canonicalizeLanguage(filters.language));
         }
         if (filters.speakerGender) {
           query = query.eq("speaker_gender", filters.speakerGender);
@@ -469,7 +470,7 @@ class SupabaseDatabase {
 
       if (updates.metadata) {
         if (updates.metadata.language)
-          dbUpdates.language = updates.metadata.language;
+          dbUpdates.language = canonicalizeLanguage(updates.metadata.language);
         if (updates.metadata.speakerGender !== undefined)
           dbUpdates.speaker_gender = updates.metadata.speakerGender;
         if (updates.metadata.speakerAgeRange !== undefined)

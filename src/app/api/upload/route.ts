@@ -1,9 +1,14 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { serverDb } from '@/lib/server-database';
-import { uploadAudioFile } from '@/lib/supabase';
-import { getSession } from '@/lib/session';
-import type { AudioMetadata } from '@/types/audio';
-import { MAX_FILE_SIZE, generateUniqueFilename, validateFile } from '@/lib/upload-utils';
+import { NextRequest, NextResponse } from "next/server";
+import { serverDb } from "@/lib/server-database";
+import { uploadAudioFile } from "@/lib/supabase";
+import { getSession } from "@/lib/session";
+import type { AudioMetadata } from "@/types/audio";
+import {
+  MAX_FILE_SIZE,
+  generateUniqueFilename,
+  validateFile,
+} from "@/lib/upload-utils";
+import { canonicalizeLanguage } from "@/lib/language";
 
 // Helper function to calculate audio duration from file
 async function calculateAudioDuration(file: File): Promise<number> {
@@ -17,27 +22,32 @@ async function calculateAudioDuration(file: File): Promise<number> {
 
     const timeout = setTimeout(() => {
       cleanup();
-      reject(new Error('Audio duration calculation timeout'));
+      reject(new Error("Audio duration calculation timeout"));
     }, 10000); // 10 second timeout
 
-    audio.addEventListener('loadedmetadata', () => {
+    audio.addEventListener("loadedmetadata", () => {
       clearTimeout(timeout);
       cleanup();
 
       const duration = audio.duration;
 
-      if (!duration || isNaN(duration) || duration <= 0 || !isFinite(duration)) {
-        reject(new Error('Invalid audio duration from file metadata'));
+      if (
+        !duration ||
+        isNaN(duration) ||
+        duration <= 0 ||
+        !isFinite(duration)
+      ) {
+        reject(new Error("Invalid audio duration from file metadata"));
         return;
       }
 
       resolve(duration);
     });
 
-    audio.addEventListener('error', (e) => {
+    audio.addEventListener("error", (e) => {
       clearTimeout(timeout);
       cleanup();
-      reject(new Error('Failed to load audio for duration calculation'));
+      reject(new Error("Failed to load audio for duration calculation"));
     });
 
     audio.src = objectUrl;
@@ -46,120 +56,128 @@ async function calculateAudioDuration(file: File): Promise<number> {
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('Upload request received')
+    console.log("Upload request received");
 
     // Authenticate via session cookie
     const session = getSession(request);
     if (!session) {
-      console.error('No valid session')
+      console.error("No valid session");
       return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
+        { error: "Authentication required" },
+        { status: 401 },
       );
     }
 
     const userId = session.userId;
-    console.log('User authenticated:', userId)
+    console.log("User authenticated:", userId);
 
     // Parse form data
     const formData = await request.formData();
 
-    const file = formData.get('file') as File;
-    const title = formData.get('title') as string;
-    const durationStr = formData.get('duration') as string;
-    const language = formData.get('language') as string;
-    const speakerGender = formData.get('speakerGender') as string;
-    const speakerAgeRange = formData.get('speakerAgeRange') as string;
-    const speakerDialect = formData.get('speakerDialect') as string;
-    const transcript = formData.get('transcript') as string;
-    const sourceUrl = formData.get('sourceUrl') as string;
-    const tags = formData.get('tags') as string;
+    const file = formData.get("file") as File;
+    const title = formData.get("title") as string;
+    const durationStr = formData.get("duration") as string;
+    const language = formData.get("language") as string;
+    const speakerGender = formData.get("speakerGender") as string;
+    const speakerAgeRange = formData.get("speakerAgeRange") as string;
+    const speakerDialect = formData.get("speakerDialect") as string;
+    const transcript = formData.get("transcript") as string;
+    const sourceUrl = formData.get("sourceUrl") as string;
+    const tags = formData.get("tags") as string;
 
-    console.log('Processing upload:', title, `(${file?.size} bytes)`)
-    console.log('Duration from form:', durationStr, typeof durationStr)
+    console.log("Processing upload:", title, `(${file?.size} bytes)`);
+    console.log("Duration from form:", durationStr, typeof durationStr);
 
     // Validate required fields
     if (!file) {
-      return NextResponse.json(
-        { error: 'No file provided' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
     if (!title?.trim()) {
-      return NextResponse.json(
-        { error: 'Title is required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Title is required" }, { status: 400 });
     }
 
     if (!language?.trim()) {
       return NextResponse.json(
-        { error: 'Language is required' },
-        { status: 400 }
+        { error: "Language is required" },
+        { status: 400 },
       );
     }
 
     // Validate file
     const fileValidationError = validateFile(file);
     if (fileValidationError) {
-      return NextResponse.json(
-        { error: fileValidationError },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: fileValidationError }, { status: 400 });
     }
 
     // Calculate duration - try form data first, then calculate from file
     let duration: number;
 
-    if (durationStr && !isNaN(Number(durationStr)) && Number(durationStr) > 0 && isFinite(Number(durationStr))) {
+    if (
+      durationStr &&
+      !isNaN(Number(durationStr)) &&
+      Number(durationStr) > 0 &&
+      isFinite(Number(durationStr))
+    ) {
       duration = Number(durationStr);
-      console.log('Using form duration:', duration)
+      console.log("Using form duration:", duration);
     } else {
-      console.log('Invalid or missing duration from form, calculating from file...')
+      console.log(
+        "Invalid or missing duration from form, calculating from file...",
+      );
       try {
         duration = await calculateAudioDuration(file);
-        console.log('Calculated duration from file:', duration)
+        console.log("Calculated duration from file:", duration);
       } catch (error) {
-        console.error('Failed to calculate duration:', error)
+        console.error("Failed to calculate duration:", error);
         return NextResponse.json(
-          { error: 'Could not determine audio duration. Please try again with a valid audio file.' },
-          { status: 400 }
+          {
+            error:
+              "Could not determine audio duration. Please try again with a valid audio file.",
+          },
+          { status: 400 },
         );
       }
     }
 
     // Final validation of duration
     if (!duration || isNaN(duration) || duration <= 0 || !isFinite(duration)) {
-      console.error('Invalid duration detected:', duration, typeof duration)
+      console.error("Invalid duration detected:", duration, typeof duration);
       return NextResponse.json(
-        { error: 'Invalid audio duration detected. Please try a different audio file.' },
-        { status: 400 }
+        {
+          error:
+            "Invalid audio duration detected. Please try a different audio file.",
+        },
+        { status: 400 },
       );
     }
 
-    if (duration > 300) { // 5 minutes max
+    if (duration > 300) {
+      // 5 minutes max
       return NextResponse.json(
-        { error: 'Audio file too long. Maximum duration is 5 minutes for direct uploads.' },
-        { status: 400 }
+        {
+          error:
+            "Audio file too long. Maximum duration is 5 minutes for direct uploads.",
+        },
+        { status: 400 },
       );
     }
 
     // Validate speaker age range if provided
-    const validAgeRanges = ['teen', 'younger-adult', 'adult', 'senior'];
+    const validAgeRanges = ["teen", "younger-adult", "adult", "senior"];
     if (speakerAgeRange && !validAgeRanges.includes(speakerAgeRange)) {
       return NextResponse.json(
-        { error: 'Invalid speaker age range' },
-        { status: 400 }
+        { error: "Invalid speaker age range" },
+        { status: 400 },
       );
     }
 
     // Validate speaker gender if provided
-    const validGenders = ['male', 'female', 'other'];
+    const validGenders = ["male", "female", "other"];
     if (speakerGender && !validGenders.includes(speakerGender)) {
       return NextResponse.json(
-        { error: 'Invalid speaker gender' },
-        { status: 400 }
+        { error: "Invalid speaker gender" },
+        { status: 400 },
       );
     }
 
@@ -168,53 +186,64 @@ export async function POST(request: NextRequest) {
 
     try {
       // Upload file to Supabase Storage using service role client
-      console.log('Uploading file to Supabase Storage...');
+      console.log("Uploading file to Supabase Storage...");
       const storagePath = await uploadAudioFile(file, userId, filename);
-      console.log('File uploaded successfully:', storagePath);
+      console.log("File uploaded successfully:", storagePath);
 
       // Prepare metadata
       const metadata: AudioMetadata = {
-        language: language.trim(),
-        speakerGender: speakerGender as any || undefined,
-        speakerAgeRange: speakerAgeRange as any || undefined,
+        language: canonicalizeLanguage(language),
+        speakerGender: (speakerGender as any) || undefined,
+        speakerAgeRange: (speakerAgeRange as any) || undefined,
         speakerDialect: speakerDialect || undefined,
         transcript: transcript || undefined,
         sourceUrl: sourceUrl || undefined,
-        tags: tags ? tags.split(',').map(tag => tag.trim()).filter(Boolean) : [],
+        tags: tags
+          ? tags
+              .split(",")
+              .map((tag) => tag.trim())
+              .filter(Boolean)
+          : [],
       };
 
       // Save to database
-      console.log('Saving clip metadata to database...');
-      console.log('Duration being saved:', duration, typeof duration);
+      console.log("Saving clip metadata to database...");
+      console.log("Duration being saved:", duration, typeof duration);
 
-      const audioClip = await serverDb.createAudioClip({
-        title: title.trim(),
-        duration: duration,
-        filename,
-        originalFilename: file.name,
-        fileSize: file.size,
-        storagePath,
-        metadata,
-        uploadedBy: userId,
-      }, userId);
+      const audioClip = await serverDb.createAudioClip(
+        {
+          title: title.trim(),
+          duration: duration,
+          filename,
+          originalFilename: file.name,
+          fileSize: file.size,
+          storagePath,
+          metadata,
+          uploadedBy: userId,
+        },
+        userId,
+      );
 
-      console.log('Upload complete:', audioClip.title)
+      console.log("Upload complete:", audioClip.title);
 
       return NextResponse.json({
         success: true,
         clip: audioClip,
       });
-
     } catch (uploadError) {
-      console.error('Upload process failed:', uploadError);
+      console.error("Upload process failed:", uploadError);
       throw uploadError;
     }
-
   } catch (error) {
-    console.error('Upload error:', error);
+    console.error("Upload error:", error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Upload failed. Please try again.' },
-      { status: 500 }
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Upload failed. Please try again.",
+      },
+      { status: 500 },
     );
   }
 }
